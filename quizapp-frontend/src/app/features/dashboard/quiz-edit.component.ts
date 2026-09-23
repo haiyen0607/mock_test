@@ -14,63 +14,128 @@ import { takeUntil } from 'rxjs/operators';
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, RouterModule],
   template: `
-    <div class="container py-5">
-      <div class="row justify-content-center">
-        <div class="col-lg-7">
-          <a routerLink="/dashboard/my-quizzes" class="btn btn-outline-secondary mb-4">← Quiz Của Tôi</a>
+    <div class="page-bg min-vh-100 py-5">
+      <div class="container">
+        <div class="row justify-content-center">
+          <div class="col-lg-7">
+            <!-- Back -->
+            <a routerLink="/dashboard/my-quizzes" class="btn btn-back mb-4">
+              ← Quay lại Quiz Của Tôi
+            </a>
 
-          <div class="card shadow-sm">
-            <div class="card-body p-4">
-              <h2 class="mb-4">✏️ Sửa Quiz</h2>
+            <div class="form-card">
+              <div class="form-card-accent"></div>
+              <div class="p-4 p-md-5">
+                <h2 class="mb-4 text-secondary fw-bold"><i class="bi bi-pencil"></i> Sửa Quiz</h2>
 
-              <div *ngIf="isLoading" class="text-center py-4">
-                <div class="spinner-border text-primary"></div>
-              </div>
+                <div *ngIf="isLoading" class="text-center py-5">
+                  <div class="spinner-border" role="status" style="color: #667eea;"></div>
+                </div>
 
-              <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show">
-                {{ errorMessage }}
-                <button type="button" class="btn-close" (click)="errorMessage = null"></button>
-              </div>
+                <!-- Error -->
+                <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show rounded-3 border-0">
+                  {{ errorMessage }}
+                  <button type="button" class="btn-close" (click)="errorMessage = null"></button>
+                </div>
 
-              <form *ngIf="!isLoading" [formGroup]="quizForm" (ngSubmit)="onSubmit()">
-                <div class="mb-3">
-                  <label class="form-label">Tiêu đề <span class="text-danger">*</span></label>
-                  <input type="text" class="form-control" formControlName="title"
-                         [class.is-invalid]="isFieldInvalid('title')" />
-                  <div *ngIf="isFieldInvalid('title')" class="invalid-feedback d-block">
-                    Tiêu đề là bắt buộc, tối đa 255 ký tự
+                <form *ngIf="!isLoading" [formGroup]="quizForm" (ngSubmit)="onSubmit()">
+                  <div class="mb-4">
+                    <label class="form-label">Tiêu đề <span class="text-danger">*</span></label>
+                    <input
+                      type="text"
+                      class="form-control"
+                      formControlName="title"
+                      [class.is-invalid]="isFieldInvalid('title')"
+                    />
+                    <div *ngIf="isFieldInvalid('title')" class="invalid-feedback d-block">
+                      Tiêu đề là bắt buộc, tối đa 255 ký tự
+                    </div>
                   </div>
-                </div>
 
-                <div class="mb-3">
-                  <label class="form-label">Mô tả</label>
-                  <textarea class="form-control" rows="3" formControlName="description"
-                            [class.is-invalid]="isFieldInvalid('description')"></textarea>
-                </div>
-
-                <div class="mb-4">
-                  <label class="form-label">Thời gian làm bài (phút) <span class="text-danger">*</span></label>
-                  <input type="number" class="form-control" formControlName="duration" min="1" max="600"
-                         [class.is-invalid]="isFieldInvalid('duration')" />
-                  <div *ngIf="isFieldInvalid('duration')" class="invalid-feedback d-block">
-                    Thời gian phải từ 1 đến 600 phút
+                  <div class="mb-4">
+                    <label class="form-label">Mô tả</label>
+                    <textarea
+                      class="form-control"
+                      rows="4"
+                      formControlName="description"
+                      [class.is-invalid]="isFieldInvalid('description')"
+                    ></textarea>
                   </div>
-                </div>
 
-                <div class="d-flex gap-2">
-                  <button type="submit" class="btn btn-primary" [disabled]="isSubmitting || quizForm.invalid">
-                    {{ isSubmitting ? 'Đang lưu...' : '💾 Lưu Thay Đổi' }}
-                  </button>
-                  <a routerLink="/dashboard/my-quizzes" class="btn btn-outline-secondary">Hủy</a>
-                </div>
-              </form>
+                  <div class="mb-5">
+                    <label class="form-label">Thời gian làm bài (phút) <span class="text-danger">*</span></label>
+                    <input
+                      type="number"
+                      class="form-control"
+                      style="max-width: 180px;"
+                      formControlName="duration"
+                      min="1"
+                      max="600"
+                      [class.is-invalid]="isFieldInvalid('duration')"
+                    />
+                    <div *ngIf="isFieldInvalid('duration')" class="invalid-feedback d-block">
+                      Thời gian phải từ 1 đến 600 phút
+                    </div>
+                  </div>
+
+                  <div class="d-flex gap-3 align-items-center">
+                    <button
+                      type="submit"
+                      class="btn btn-gradient px-4"
+                      [disabled]="isSubmitting || quizForm.invalid"
+                    >
+                      <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
+                      {{ isSubmitting ? 'Đang lưu...' : 'Lưu Thay Đổi' }}
+                    </button>
+                    <a routerLink="/dashboard/my-quizzes" class="btn btn-outline-secondary rounded-3 px-4">Hủy</a>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         </div>
       </div>
     </div>
   `,
-  styles: []
+  styles: [`
+    .page-bg { background-color: #f8f9ff; }
+
+    .btn-back {
+      background: white;
+      border: 1.5px solid #e8eaf6;
+      border-radius: 50px;
+      color: #6b7280;
+      font-weight: 500;
+      text-decoration: none;
+      padding: 0.45rem 1rem;
+      transition: all 0.2s;
+    }
+    .btn-back:hover { border-color: #667eea; color: #667eea; }
+
+    .form-card {
+      background: white;
+      border-radius: 14px;
+      border: 1px solid #e8eaf6;
+      box-shadow: 0 2px 12px rgba(102,126,234,0.07);
+      overflow: hidden;
+    }
+    .form-card-accent {
+      height: 5px;
+      background: linear-gradient(135deg, #667eea, #764ba2);
+    }
+
+    .btn-gradient {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-weight: 600;
+      padding: 0.65rem 1.5rem;
+      transition: all 0.2s;
+    }
+    .btn-gradient:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); color: white; }
+    .btn-gradient:disabled { opacity: 0.65; }
+  `]
 })
 export class QuizEditComponent implements OnInit, OnDestroy {
   quizForm: FormGroup;

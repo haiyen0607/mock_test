@@ -19,168 +19,275 @@ import { takeUntil } from 'rxjs/operators';
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule],
   template: `
-    <div class="container py-4">
-      <!-- Loading -->
-      <div *ngIf="isLoading" class="text-center py-5">
-        <div class="spinner-border text-primary"></div>
-        <p class="mt-2">Đang chuẩn bị bài làm...</p>
-      </div>
+<div class="attempt-bg">
+  <!-- Loading -->
+  <div *ngIf="isLoading" class="d-flex flex-column justify-content-center align-items-center" style="min-height: 100vh;">
+    <div class="spinner-border" style="width: 3rem; height: 3rem; color: #667eea;"></div>
+    <p class="mt-3 text-muted fs-5">Đang chuẩn bị bài làm...</p>
+  </div>
 
-      <!-- Error (vd: hết lượt trial - UC07 A1) -->
-      <div *ngIf="errorMessage" class="alert alert-danger">
-        {{ errorMessage }}
-        <div class="mt-3">
-          <a routerLink="/auth/register" class="btn btn-primary btn-sm me-2">Đăng Ký</a>
-          <a routerLink="/quiz/browse" class="btn btn-outline-secondary btn-sm">← Quay lại danh sách</a>
+  <!-- Error -->
+  <div *ngIf="errorMessage" class="d-flex flex-column justify-content-center align-items-center" style="min-height: 100vh;">
+    <div class="error-card">
+      <div class="text-center p-5">
+        <div style="font-size: 4rem;" class="mb-4">⚠️</div>
+        <h4 class="mb-4 text-secondary">{{ errorMessage }}</h4>
+        <div class="d-grid gap-2" style="max-width: 280px; margin: 0 auto;">
+          <a routerLink="/auth/register" class="btn btn-gradient rounded-pill">Đăng Ký Tài Khoản</a>
+          <a routerLink="/quiz/browse" class="btn btn-light rounded-pill border">Quay lại danh sách</a>
         </div>
       </div>
+    </div>
+  </div>
 
-      <div *ngIf="content && !isLoading && !errorMessage">
-        <!-- Title + Timer + Progress -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h4 class="mb-0">{{ content.title }}</h4>
-          <span class="badge fs-6" [ngClass]="timeRemaining < 60 ? 'bg-danger' : 'bg-primary'">
-            ⏱️ {{ formatTime(timeRemaining) }}
+  <!-- Content -->
+  <div *ngIf="content && !isLoading && !errorMessage" class="d-flex flex-column" style="min-height: 100vh;">
+    <!-- Sticky Header -->
+    <div class="sticky-top bg-white" style="box-shadow: 0 2px 12px rgba(0,0,0,0.06); z-index: 100;">
+      <div class="attempt-container py-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h5 class="mb-0 fw-medium text-secondary text-truncate pe-3">{{ content.title }}</h5>
+          <span class="timer-badge flex-shrink-0" [ngClass]="timeRemaining < 60 ? 'timer-urgent' : 'timer-normal'">
+            <i class="bi bi-stopwatch"></i> {{ formatTime(timeRemaining) }}
           </span>
         </div>
-
-        <div class="progress mb-4" style="height: 25px;">
-          <div
-            class="progress-bar"
-            role="progressbar"
-            [style.width.%]="getProgress()"
-          >
-            {{ currentIndex + 1 }} / {{ content.questions.length }}
-          </div>
+        <div class="progress" style="height: 5px;">
+          <div class="progress-bar" role="progressbar" [style.width.%]="getProgress()"></div>
         </div>
+      </div>
+    </div>
 
-        <!-- Question Content -->
-        <div *ngIf="currentQuestion" class="card shadow-sm mb-4">
-          <div class="card-body">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-              <h5 class="mb-0">Câu {{ currentIndex + 1 }}: {{ currentQuestion.content }}</h5>
-              <span class="badge bg-secondary ms-2 flex-shrink-0">{{ typeLabel(currentQuestion.questionType) }}</span>
-            </div>
+    <!-- Question Area -->
+    <div class="attempt-container flex-grow-1 py-4">
+      <div *ngIf="currentQuestion" class="question-card mb-4">
+        <div class="p-4 p-md-5">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <span class="q-num-badge">Câu {{ currentIndex + 1 }} / {{ content.questions.length }}</span>
+            <span class="type-badge">{{ typeLabel(currentQuestion.questionType) }}</span>
+          </div>
 
-            <!-- SingleChoice / TrueFalse: radio, chọn đúng 1 đáp án -->
-            <div *ngIf="isSingleSelect(currentQuestion)" class="list-group">
-              <label
-                *ngFor="let option of currentQuestion.options"
-                class="list-group-item"
-                [class.active-option]="singleSelections[currentQuestion.questionId] === option.answerId"
-              >
-                <input
-                  type="radio"
-                  [name]="'q' + currentQuestion.questionId"
-                  [value]="option.answerId"
-                  [(ngModel)]="singleSelections[currentQuestion.questionId]"
-                  class="form-check-input me-2"
-                />
-                {{ option.content }}
-              </label>
-            </div>
+          <h3 class="question-text mb-5">{{ currentQuestion.content }}</h3>
 
-            <!-- MultipleChoice: checkbox, chọn NHIỀU đáp án -->
-            <div *ngIf="isMultiSelect(currentQuestion)">
-              <p class="text-muted small">☑️ Có thể chọn nhiều đáp án</p>
-              <div class="list-group">
-                <label
-                  *ngFor="let option of currentQuestion.options"
-                  class="list-group-item"
-                  [class.active-option]="isChecked(currentQuestion.questionId, option.answerId)"
-                >
-                  <input
-                    type="checkbox"
-                    [checked]="isChecked(currentQuestion.questionId, option.answerId)"
-                    (change)="toggleMulti(currentQuestion.questionId, option.answerId)"
-                    class="form-check-input me-2"
-                  />
-                  {{ option.content }}
-                </label>
+          <!-- SingleChoice / TrueFalse -->
+          <div *ngIf="isSingleSelect(currentQuestion)" class="d-flex flex-column gap-3">
+            <label *ngFor="let option of currentQuestion.options"
+                   class="option-card"
+                   [class.option-selected]="singleSelections[currentQuestion.questionId] === option.answerId">
+              <div class="d-flex align-items-center gap-3">
+                <input type="radio"
+                       [name]="'q' + currentQuestion.questionId"
+                       [value]="option.answerId"
+                       [(ngModel)]="singleSelections[currentQuestion.questionId]"
+                       class="form-check-input fs-5" />
+                <span>{{ option.content }}</span>
               </div>
-            </div>
+            </label>
+          </div>
 
-            <!-- FillInTheBlanks / ShortAnswer: input text -->
-            <div *ngIf="isShortText(currentQuestion)" class="mt-2">
-              <input
-                type="text"
-                class="form-control"
-                placeholder="Nhập câu trả lời của bạn..."
-                [(ngModel)]="textResponses[currentQuestion.questionId]"
-              />
-            </div>
+          <!-- MultipleChoice -->
+          <div *ngIf="isMultiSelect(currentQuestion)" class="d-flex flex-column gap-3">
+            <p class="text-muted small mb-1">☑️ Có thể chọn nhiều đáp án</p>
+            <label *ngFor="let option of currentQuestion.options"
+                   class="option-card"
+                   [class.option-selected]="isChecked(currentQuestion.questionId, option.answerId)">
+              <div class="d-flex align-items-center gap-3">
+                <input type="checkbox"
+                       [checked]="isChecked(currentQuestion.questionId, option.answerId)"
+                       (change)="toggleMulti(currentQuestion.questionId, option.answerId)"
+                       class="form-check-input fs-5" />
+                <span>{{ option.content }}</span>
+              </div>
+            </label>
+          </div>
 
-            <!-- LongAnswer: textarea (chấm thủ công) -->
-            <div *ngIf="currentQuestion.questionType === 'LongAnswer'" class="mt-2">
-              <textarea
-                class="form-control"
-                rows="6"
-                placeholder="Nhập bài làm của bạn..."
-                [(ngModel)]="textResponses[currentQuestion.questionId]"
-              ></textarea>
-              <small class="text-muted">✍️ Câu tự luận sẽ được chấm thủ công sau khi nộp.</small>
-            </div>
+          <!-- FillInTheBlanks / ShortAnswer -->
+          <div *ngIf="isShortText(currentQuestion)" class="mt-3">
+            <input type="text"
+                   class="form-control text-input"
+                   placeholder="Nhập câu trả lời của bạn..."
+                   [(ngModel)]="textResponses[currentQuestion.questionId]" />
+          </div>
+
+          <!-- LongAnswer -->
+          <div *ngIf="currentQuestion.questionType === 'LongAnswer'" class="mt-3">
+            <textarea class="form-control text-input" rows="7"
+                      placeholder="Nhập bài làm của bạn..."
+                      [(ngModel)]="textResponses[currentQuestion.questionId]"></textarea>
+            <div class="form-text text-muted mt-2">✍️ Câu tự luận sẽ được chấm thủ công sau khi nộp.</div>
           </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Navigation Buttons -->
-        <div class="d-flex justify-content-between">
-          <button
-            class="btn btn-outline-secondary"
-            (click)="previousQuestion()"
-            [disabled]="currentIndex === 0"
-          >
+    <!-- Sticky Footer Nav -->
+    <div class="sticky-bottom bg-white border-top" style="box-shadow: 0 -4px 16px rgba(0,0,0,0.06);">
+      <div class="attempt-container py-3 position-relative">
+        <div class="text-center mb-2">
+          <span class="answered-pill">
+            Đã trả lời: {{ answeredCount() }} / {{ content.questions.length }}
+          </span>
+        </div>
+        <div class="d-flex justify-content-between align-items-center">
+          <button class="btn btn-nav-secondary"
+                  (click)="previousQuestion()" [disabled]="currentIndex === 0">
             ← Trước
           </button>
 
-          <div class="btn-group">
-            <button
-              class="btn btn-primary"
-              *ngIf="currentIndex < content.questions.length - 1"
-              (click)="nextQuestion()"
-            >
+          <div class="d-flex gap-2 align-items-center">
+            <button class="btn btn-abandon" (click)="abandonAttempt()" [disabled]="isSubmitting">
+              Thoát
+            </button>
+            <button *ngIf="currentIndex < content.questions.length - 1"
+                    class="btn btn-gradient btn-lg rounded-pill px-5"
+                    (click)="nextQuestion()">
               Tiếp Theo →
             </button>
-            <button
-              class="btn btn-success"
-              *ngIf="currentIndex === content.questions.length - 1"
-              (click)="submitAttempt()"
-              [disabled]="isSubmitting"
-            >
+            <button *ngIf="currentIndex === content.questions.length - 1"
+                    class="btn btn-submit btn-lg rounded-pill px-5"
+                    (click)="submitAttempt()" [disabled]="isSubmitting">
               {{ isSubmitting ? 'Đang nộp...' : '📤 Nộp Bài' }}
             </button>
           </div>
-
-          <button
-            class="btn btn-outline-danger"
-            (click)="abandonAttempt()"
-            [disabled]="isSubmitting"
-          >
-            Thoát
-          </button>
         </div>
-
-        <!-- Đã trả lời bao nhiêu câu -->
-        <p class="text-center text-muted small mt-3">
-          Đã trả lời {{ answeredCount() }} / {{ content.questions.length }} câu
-        </p>
       </div>
     </div>
+  </div>
+</div>
   `,
   styles: [
     `
-      .list-group-item {
+      .attempt-bg { background: #f8f9ff; min-height: 100vh; }
+      .attempt-container { max-width: 760px; margin: 0 auto; padding: 0 1rem; }
+
+      .timer-badge {
+        padding: 0.45rem 1rem;
+        border-radius: 50px;
+        font-weight: 700;
+        font-size: 1rem;
+        letter-spacing: 0.02em;
+      }
+      .timer-normal { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+      .timer-urgent { background: #ef4444; color: white; animation: pulse 1s infinite; }
+
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.75; } }
+
+      .question-card {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #e8eaf6;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.08);
+      }
+
+      .q-num-badge {
+        background: rgba(102, 126, 234, 0.1);
+        color: #667eea;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        border-radius: 50px;
+        padding: 0.35rem 0.85rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+      }
+
+      .type-badge {
+        background: #f1f3f9;
+        color: #4b5563;
+        border-radius: 6px;
+        padding: 0.3rem 0.7rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+
+      .question-text {
+        color: #1a1a2e;
+        font-size: 1.2rem;
+        font-weight: 700;
+        line-height: 1.6;
+      }
+
+      .option-card {
+        display: block;
+        padding: 1rem 1.25rem;
+        border: 2px solid #e8eaf6;
+        border-radius: 12px;
         cursor: pointer;
-        transition: background-color 0.2s;
+        transition: all 0.2s ease;
+        background: #fafbff;
+      }
+      .option-card:hover { border-color: #667eea; background: rgba(102,126,234,0.04); }
+      .option-selected { border-color: #667eea; background: rgba(102,126,234,0.08); }
+
+      .form-check-input { cursor: pointer; accent-color: #667eea; }
+      .form-check-input:checked { background-color: #667eea; border-color: #667eea; }
+
+      .text-input {
+        border: 2px solid #e8eaf6;
+        border-radius: 12px;
+        padding: 0.85rem 1rem;
+        font-size: 1rem;
+        transition: border-color 0.2s;
+      }
+      .text-input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102,126,234,0.12); }
+
+      .answered-pill {
+        display: inline-block;
+        background: #f1f3f9;
+        color: #4b5563;
+        border-radius: 50px;
+        padding: 0.3rem 0.9rem;
+        font-size: 0.85rem;
+        font-weight: 600;
       }
 
-      .list-group-item:hover {
-        background-color: #f8f9fa;
+      .btn-gradient {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        font-weight: 700;
+        transition: all 0.2s;
       }
+      .btn-gradient:hover { opacity: 0.9; transform: translateY(-1px); color: white; }
 
-      .active-option {
-        background-color: #e7f1ff;
-        border-color: #667eea;
+      .btn-nav-secondary {
+        background: white;
+        border: 1.5px solid #e8eaf6;
+        border-radius: 50px;
+        color: #6b7280;
+        font-weight: 600;
+        padding: 0.55rem 1.4rem;
+        transition: all 0.2s;
+      }
+      .btn-nav-secondary:hover:not(:disabled) { border-color: #667eea; color: #667eea; }
+      .btn-nav-secondary:disabled { opacity: 0.5; }
+
+      .btn-abandon {
+        background: #fef2f2;
+        border: 1.5px solid #fecaca;
+        border-radius: 50px;
+        color: #ef4444;
+        font-weight: 600;
+        padding: 0.55rem 1.2rem;
+        transition: all 0.2s;
+      }
+      .btn-abandon:hover:not(:disabled) { background: #ef4444; color: white; }
+
+      .btn-submit {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        border: none;
+        font-weight: 700;
+        box-shadow: 0 4px 16px rgba(16,185,129,0.3);
+        transition: all 0.2s;
+      }
+      .btn-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,185,129,0.4); color: white; }
+      .btn-submit:disabled { opacity: 0.65; }
+
+      .error-card {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid #e8eaf6;
+        box-shadow: 0 8px 40px rgba(0,0,0,0.08);
+        max-width: 420px;
+        width: 90%;
       }
     `
   ]

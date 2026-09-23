@@ -12,119 +12,176 @@ import { takeUntil } from 'rxjs/operators';
   standalone: true,
   imports: [CommonModule, RouterModule],
   template: `
-    <div class="container py-5">
-      <!-- Back Button -->
-      <a routerLink="/quiz/browse" class="btn btn-outline-secondary mb-4">
-        ← Quay lại
-      </a>
+<div class="bg-page min-vh-100 py-5">
+  <div class="container max-w-800">
+    <!-- Back btn -->
+    <a routerLink="/quiz/browse" class="btn btn-white shadow-sm rounded-pill mb-4 px-4 fw-medium text-secondary hover-primary">
+      ← Quay lại danh sách
+    </a>
 
-      <!-- Loading -->
-      <div *ngIf="isLoading" class="text-center py-5">
-        <div class="spinner-border text-primary"></div>
-        <p class="mt-2">Đang tải kết quả...</p>
-      </div>
+    <!-- Loading -->
+    <div *ngIf="isLoading" class="text-center py-5">
+      <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;"></div>
+      <p class="mt-3 text-muted fs-5">Đang tải kết quả...</p>
+    </div>
 
-      <!-- Error -->
-      <div *ngIf="errorMessage" class="alert alert-danger">
-        {{ errorMessage }}
-      </div>
+    <!-- Error -->
+    <div *ngIf="errorMessage" class="alert alert-danger rounded-4 shadow-sm border-0 p-4">
+      <h5 class="alert-heading fw-bold">⚠️ Lỗi</h5>
+      <p class="mb-0">{{ errorMessage }}</p>
+    </div>
 
-      <!-- Result Content (UC10) -->
-      <div *ngIf="result && !isLoading">
-        <!-- Score Card -->
-        <div class="card shadow-lg mb-4 bg-gradient">
-          <div class="card-body text-center text-white p-5">
-            <h1 class="display-4 fw-bold">{{ percentage }}%</h1>
-            <p class="lead">{{ getScoreMessage(percentage) }}</p>
-            <div class="mt-4">
-              <p class="mb-2">
-                <strong>{{ result.title }}</strong>
-              </p>
-              <p class="mb-2">
-                Trả lời đúng <strong>{{ correctCount }}/{{ gradableCount }}</strong> câu được chấm tự động
-              </p>
-              <p *ngIf="pendingCount > 0" class="mb-2">
-                ✍️ Còn <strong>{{ pendingCount }}</strong> câu tự luận đang chờ chấm thủ công
-              </p>
-              <p class="text-white-50 mb-0">Nộp lúc: {{ formatDateTime(result.submittedAt) }}</p>
+    <!-- Content -->
+    <div *ngIf="result && !isLoading">
+      <!-- Hero Card -->
+      <div class="card border-0 rounded-4 shadow-lg mb-5 hero-card overflow-hidden">
+        <!-- Visual ring effect -->
+        <div class="hero-ring ring-1"></div>
+        <div class="hero-ring ring-2"></div>
+
+        <div class="card-body p-5 text-center text-white position-relative z-1">
+          <div class="score-circle mx-auto mb-4 d-flex align-items-center justify-content-center shadow-lg">
+            <h1 class="display-3 fw-bold mb-0">{{ percentage }}%</h1>
+          </div>
+
+          <h3 class="fw-bold mb-1">{{ getScoreMessage(percentage) }}</h3>
+          <h5 class="text-white-50 fw-normal mb-4">{{ result.title }}</h5>
+
+          <div class="d-flex flex-wrap gap-3 justify-content-center mt-2">
+            <div class="stat-badge rounded-pill px-4 py-2 bg-white bg-opacity-10 backdrop-blur border border-white border-opacity-25">
+              <span class="fs-5 me-2">🎯</span>
+              <span class="fw-medium">Đúng {{ correctCount }}/{{ gradableCount }}</span>
+            </div>
+            <div *ngIf="pendingCount > 0" class="stat-badge rounded-pill px-4 py-2 bg-warning bg-opacity-25 backdrop-blur border border-warning border-opacity-50 text-warning">
+              <span class="fs-5 me-2">✍️</span>
+              <span class="fw-medium">Chờ chấm {{ pendingCount }}</span>
             </div>
           </div>
+
+          <p class="small text-white-50 mt-4 mb-0">
+            Nộp lúc: {{ formatDateTime(result.submittedAt) }}
+          </p>
         </div>
+      </div>
 
-        <!-- Detailed Results -->
-        <div class="card shadow-sm">
-          <div class="card-header bg-light">
-            <h5 class="mb-0">📋 Chi Tiết Từng Câu</h5>
-          </div>
-          <div class="card-body">
-            <div
-              *ngFor="let q of result.questions; let i = index"
-              class="mb-4 pb-4 border-bottom"
-            >
-              <div class="d-flex align-items-start gap-3">
-                <!-- Icon: đúng / sai / chờ chấm -->
-                <div class="fs-5">
-                  <span *ngIf="q.isCorrect === true" class="text-success">✓</span>
-                  <span *ngIf="q.isCorrect === false" class="text-danger">✗</span>
-                  <span *ngIf="q.isCorrect === null" class="text-warning">⏳</span>
+      <!-- Detail list -->
+      <h4 class="fw-bold mb-4 text-secondary px-2"><i class="bi bi-card-list"></i> Chi Tiết Từng Câu</h4>
+
+      <div class="d-flex flex-column gap-3 mb-5">
+        <div *ngFor="let q of result.questions; let i = index"
+             class="card border-0 shadow-sm rounded-4 question-review-card bg-white">
+          <div class="card-body p-4">
+            <div class="d-flex gap-4">
+              <!-- Left Icon Badge -->
+              <div class="flex-shrink-0 mt-1">
+                <div class="status-icon rounded-circle d-flex align-items-center justify-content-center shadow-sm"
+                     [ngClass]="{
+                       'bg-success text-white': q.isCorrect === true,
+                       'bg-danger text-white': q.isCorrect === false,
+                       'bg-warning text-secondary': q.isCorrect === null
+                     }">
+                  <span *ngIf="q.isCorrect === true">✓</span>
+                  <span *ngIf="q.isCorrect === false">✗</span>
+                  <span *ngIf="q.isCorrect === null"><i class="bi bi-hourglass-split"></i></span>
                 </div>
+              </div>
 
-                <!-- Content -->
-                <div class="flex-grow-1">
-                  <h6>Câu {{ i + 1 }}: {{ q.content }}</h6>
+              <!-- Content -->
+              <div class="flex-grow-1">
+                <h6 class="fw-bold fs-5 mb-3 text-secondary">Câu {{ i + 1 }}: {{ q.content }}</h6>
 
-                  <div class="mt-2 small">
-                    <!-- Câu chọn đáp án: hiển thị lựa chọn của user + đáp án đúng -->
-                    <ng-container *ngIf="hasOptions(q)">
-                      <div [ngClass]="q.isCorrect ? 'text-success' : 'text-danger'">
-                        {{ q.isCorrect ? '✓' : '✗' }} Bạn chọn:
-                        <strong>{{ selectedText(q) }}</strong>
+                <div class="review-box rounded-3 p-3 bg-light">
+                  <ng-container *ngIf="hasOptions(q)">
+                    <div class="d-flex flex-column gap-2">
+                      <div class="d-flex align-items-start gap-2"
+                           [ngClass]="q.isCorrect ? 'text-success' : 'text-danger'">
+                        <span class="fw-bold">{{ q.isCorrect ? '✓' : '✗' }} Bạn chọn:</span>
+                        <span class="fw-medium">{{ selectedText(q) }}</span>
                       </div>
-                      <div *ngIf="q.isCorrect === false" class="text-success">
-                        ✓ Đáp án đúng: <strong>{{ correctText(q) }}</strong>
+                      <div *ngIf="q.isCorrect === false" class="d-flex align-items-start gap-2 text-success mt-1 pt-2 border-top">
+                        <span class="fw-bold">✓ Đáp án đúng:</span>
+                        <span class="fw-medium">{{ correctText(q) }}</span>
                       </div>
-                    </ng-container>
+                    </div>
+                  </ng-container>
 
-                    <!-- Câu text: hiển thị câu trả lời + trạng thái chấm -->
-                    <ng-container *ngIf="!hasOptions(q)">
-                      <div>
-                        📝 Bạn trả lời: <strong>{{ q.responseText || 'Để trống' }}</strong>
+                  <ng-container *ngIf="!hasOptions(q)">
+                    <div class="d-flex flex-column gap-2">
+                      <div class="d-flex align-items-start gap-2 text-secondary">
+                        <span><i class="bi bi-file-earmark-text"></i> Bạn trả lời:</span>
+                        <span class="fw-medium">{{ q.responseText || 'Để trống' }}</span>
                       </div>
-                      <div *ngIf="q.isCorrect === true" class="text-success">✓ Được chấm: Đúng</div>
-                      <div *ngIf="q.isCorrect === false" class="text-danger">✗ Được chấm: Sai</div>
-                      <div *ngIf="q.isCorrect === null" class="text-warning">
-                        ⏳ Đang chờ chấm thủ công
+                      <div class="mt-2 pt-2 border-top">
+                        <div *ngIf="q.isCorrect === true" class="text-success fw-medium">✓ Được chấm: Đúng</div>
+                        <div *ngIf="q.isCorrect === false" class="text-danger fw-medium">✗ Được chấm: Sai</div>
+                        <div *ngIf="q.isCorrect === null" class="text-warning fw-medium"><i class="bi bi-hourglass-split"></i> Đang chờ chấm thủ công</div>
                       </div>
-                    </ng-container>
-                  </div>
+                    </div>
+                  </ng-container>
                 </div>
               </div>
             </div>
-
-            <p *ngIf="result.questions.length === 0" class="text-muted mb-0">
-              Không có dữ liệu câu trả lời.
-            </p>
           </div>
         </div>
 
-        <!-- Action Buttons -->
-        <div class="d-grid gap-2 mt-4">
-          <button class="btn btn-primary btn-lg" routerLink="/quiz/browse">
-            Làm Quiz Khác
-          </button>
+        <div *ngIf="result.questions.length === 0" class="text-center py-5 bg-white rounded-4 shadow-sm border-0">
+          <p class="text-muted mb-0 fs-5">Không có dữ liệu câu trả lời.</p>
         </div>
       </div>
+
+      <!-- Actions -->
+      <div class="d-flex justify-content-center pb-5">
+        <button class="btn btn-primary btn-lg rounded-pill px-5 py-3 custom-gradient text-white border-0 shadow-lg fw-bold fs-5"
+                routerLink="/quiz/browse">
+          Làm Quiz Khác
+        </button>
+      </div>
     </div>
+  </div>
+</div>
   `,
   styles: [
     `
-      .bg-gradient {
+      .bg-page { background-color: #f8f9ff; }
+      .max-w-800 { max-width: 800px; margin: 0 auto; }
+      .custom-gradient { background: linear-gradient(135deg, #667eea, #764ba2); }
+      .hero-card {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        position: relative;
+        border-radius: 12px;
       }
-
-      .text-white-50 {
-        color: rgba(255, 255, 255, 0.5);
+      .hero-ring {
+        position: absolute;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
       }
+      .ring-1 { width: 300px; height: 300px; border-width: 4px; }
+      .ring-2 { width: 450px; height: 450px; border-width: 2px; }
+      .score-circle {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        border: 4px solid rgba(255, 255, 255, 0.5);
+      }
+      .backdrop-blur { backdrop-filter: blur(5px); }
+      .btn-white { background-color: #fff; border: 1px solid #e2e8f0; }
+      .hover-primary:hover { color: #667eea !important; border-color: #667eea; }
+      .question-review-card {
+        border-radius: 12px;
+        transition: transform 0.2s, box-shadow 0.2s;
+      }
+      .question-review-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 .5rem 1rem rgba(0,0,0,.08) !important;
+      }
+      .status-icon { width: 40px; height: 40px; font-size: 1.25rem; font-weight: bold; }
+      .review-box { border: 1px solid #e2e8f0; }
+      .z-1 { z-index: 1; }
     `
   ]
 })
@@ -206,7 +263,7 @@ export class ResultComponent implements OnInit, OnDestroy {
 
   getScoreMessage(percentage: number): string {
     if (this.gradableCount === 0) return '✍️ Bài của bạn đang chờ chấm thủ công';
-    if (percentage >= 90) return '🎉 Tuyệt vời!';
+    if (percentage >= 90) return '<i class="bi bi-stars"></i> Tuyệt vời!';
     if (percentage >= 80) return '👏 Tốt lắm!';
     if (percentage >= 70) return '😊 Khá tốt';
     if (percentage >= 50) return '📚 Cần cải thiện';
