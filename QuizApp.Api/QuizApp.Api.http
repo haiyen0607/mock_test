@@ -1,0 +1,204 @@
+@host = http://localhost:5080
+
+### UC01 - Register Account
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "learner01",
+  "email": "learner01@example.com",
+  "password": "Learner@123"
+}
+
+### UC02 - Login (User)
+# @name login
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "usernameOrEmail": "hoanganh",
+  "password": "User@123"
+}
+
+### UC02 - Login (Administrator)
+# @name loginAdmin
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "usernameOrEmail": "admin",
+  "password": "Admin@123"
+}
+
+@token = {{login.response.body.token}}
+@adminToken = {{loginAdmin.response.body.token}}
+
+### UC03 - Logout
+POST {{host}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+### UC04/UC05 - Browse / Search Public Quizzes (Guest)
+GET {{host}}/api/quizzes?search=angular
+
+### UC06 - View Quiz Details (Guest)
+GET {{host}}/api/quizzes/1
+
+### UC11 - Create Quiz (User)
+# @name createQuiz
+POST {{host}}/api/quizzes
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "C# Basics",
+  "description": "Kiểm tra kiến thức C# cơ bản.",
+  "duration": 20
+}
+
+@quizId = {{createQuiz.response.body.quizId}}
+
+### UC12 - My Quizzes
+GET {{host}}/api/quizzes/mine
+Authorization: Bearer {{token}}
+
+### UC12 - Update Quiz
+PUT {{host}}/api/quizzes/{{quizId}}
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "C# Basics (updated)",
+  "description": "Kiểm tra kiến thức C# cơ bản.",
+  "duration": 25
+}
+
+### UC15 - Create Question Bank
+# @name createBank
+POST {{host}}/api/question-banks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "name": "C# Bank",
+  "description": "Câu hỏi C# của tôi.",
+  "isPublic": true
+}
+
+@bankId = {{createBank.response.body.questionBankId}}
+
+### UC15 - Add Question (with answers) to Question Bank
+# @name addBankQuestion
+POST {{host}}/api/question-banks/{{bankId}}/questions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "content": "Which keyword defines a constant in C#?",
+  "questionType": "SingleChoice",
+  "answers": [
+    { "content": "const", "isCorrect": true },
+    { "content": "static", "isCorrect": false },
+    { "content": "readonly", "isCorrect": false }
+  ]
+}
+
+@bankQuestionId = {{addBankQuestion.response.body.questionId}}
+
+### UC13/UC17 - Reuse an existing Question into the Quiz
+POST {{host}}/api/quizzes/{{quizId}}/questions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "questionId": {{bankQuestionId}}
+}
+
+### UC13 - Add a brand-new Question directly into the Quiz
+POST {{host}}/api/quizzes/{{quizId}}/questions
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "questionBankId": {{bankId}},
+  "newQuestion": {
+    "content": "C# runs only on Windows.",
+    "questionType": "TrueFalse",
+    "answers": [
+      { "content": "True", "isCorrect": false },
+      { "content": "False", "isCorrect": true }
+    ]
+  }
+}
+
+### UC16 - Search Public Questions
+GET {{host}}/api/question-banks/public-questions?search=const
+
+### UC14 - Publish Quiz
+PUT {{host}}/api/quizzes/{{quizId}}/publish
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "publish": true
+}
+
+### UC07 - Try Trial Quiz (Guest)
+# @name startTrial
+POST {{host}}/api/quizzes/1/trial
+X-Guest-Id: guest-demo-0001
+
+@trialAttemptId = {{startTrial.response.body.attemptId}}
+
+### UC09 - Submit Quiz (trial)
+POST {{host}}/api/attempts/{{trialAttemptId}}/submit
+X-Guest-Id: guest-demo-0001
+Content-Type: application/json
+
+{
+  "answers": [
+    { "questionId": 1, "answerId": 1 }
+  ]
+}
+
+### UC10 - View Quiz Result (trial)
+GET {{host}}/api/attempts/{{trialAttemptId}}/result
+X-Guest-Id: guest-demo-0001
+
+### UC08 - Take Quiz (User)
+# @name startAttempt
+POST {{host}}/api/quizzes/1/attempts
+Authorization: Bearer {{token}}
+
+@attemptId = {{startAttempt.response.body.attemptId}}
+
+### UC09 - Submit Quiz (User)
+POST {{host}}/api/attempts/{{attemptId}}/submit
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "answers": [
+    { "questionId": 1, "answerId": 1 }
+  ]
+}
+
+### UC10 - View Quiz Result (User)
+GET {{host}}/api/attempts/{{attemptId}}/result
+Authorization: Bearer {{token}}
+
+### UC18 - Manage Users (Admin)
+GET {{host}}/api/admin/users
+Authorization: Bearer {{adminToken}}
+
+### UC19 - Manage System Quizzes (Admin)
+GET {{host}}/api/admin/quizzes
+Authorization: Bearer {{adminToken}}
+
+### UC20 - Moderate Content: remove a Quiz (Admin)
+PUT {{host}}/api/admin/quizzes/1/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "Removed"
+}
