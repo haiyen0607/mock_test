@@ -10,4 +10,11 @@ public static class CurrentUserExtensions
 
     public static bool IsAdministrator(this ClaimsPrincipal user) =>
         user.IsInRole("Administrator");
+
+    /// <summary>
+    /// Quy tắc sở hữu dùng chung (UC12/UC13/UC14/UC15 – alt. flow "does not own"):
+    /// đã đăng nhập VÀ (là chủ sở hữu HOẶC là Administrator).
+    /// </summary>
+    public static bool CanManage(this ClaimsPrincipal user, int ownerId) =>
+        (user.Identity?.IsAuthenticated ?? false) && (user.GetUserId() == ownerId || user.IsAdministrator());
 }

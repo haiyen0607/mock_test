@@ -1,5 +1,10 @@
 @host = http://localhost:5080
 
+# Lưu ý:
+# - Mọi lỗi trả ProblemDetails có "code" (vd. INVALID_CREDENTIALS, QUIZ_NOT_FOUND) – xem API_CHANGES.md.
+# - login/register bị giới hạn 5 request/phút/IP (429 RATE_LIMITED); trial 10 request/giờ/IP.
+# - Các danh sách trả PagedResult { items, page, pageSize, total }; query page, pageSize (≤ 50), sort.
+
 ### UC01 - Register Account
 POST {{host}}/api/auth/register
 Content-Type: application/json
@@ -38,7 +43,7 @@ POST {{host}}/api/auth/logout
 Authorization: Bearer {{token}}
 
 ### UC04/UC05 - Browse / Search Public Quizzes (Guest)
-GET {{host}}/api/quizzes?search=angular
+GET {{host}}/api/quizzes?search=angular&page=1&pageSize=20&sort=newest
 
 ### UC06 - View Quiz Details (Guest)
 GET {{host}}/api/quizzes/1
@@ -57,8 +62,8 @@ Content-Type: application/json
 
 @quizId = {{createQuiz.response.body.quizId}}
 
-### UC12 - My Quizzes
-GET {{host}}/api/quizzes/mine
+### UC12 - My Quizzes (phân trang, sort = newest | oldest | title)
+GET {{host}}/api/quizzes/mine?page=1&pageSize=20&sort=title
 Authorization: Bearer {{token}}
 
 ### UC12 - Update Quiz
@@ -186,12 +191,40 @@ Content-Type: application/json
 GET {{host}}/api/attempts/{{attemptId}}/result
 Authorization: Bearer {{token}}
 
-### UC18 - Manage Users (Admin)
-GET {{host}}/api/admin/users
+### UC08 - Lấy lại nội dung bài đang làm (reload trang) – có startedAt/expiresAt; đã nộp -> 409 ATTEMPT_SUBMITTED
+GET {{host}}/api/attempts/{{attemptId}}/content
+Authorization: Bearer {{token}}
+
+### A5 - Bài đã làm (lịch sử, chỉ lượt đã nộp)
+GET {{host}}/api/attempts/mine?page=1&pageSize=20&sort=newest
+Authorization: Bearer {{token}}
+
+### A5 - Danh sách câu tự luận chờ chấm của Quiz (chủ Quiz/Admin); includeGraded=true để lấy cả câu đã chấm
+# @name grading
+GET {{host}}/api/quizzes/1/grading?page=1&pageSize=20
+Authorization: Bearer {{token}}
+
+@attemptAnswerId = {{grading.response.body.items[0].attemptAnswerId}}
+
+### A5 - Chấm 1 câu tự luận -> trả điểm mới của lượt làm bài
+PUT {{host}}/api/attempt-answers/{{attemptAnswerId}}/grade
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "isCorrect": true
+}
+
+### A5 - Thống kê Quiz (chủ Quiz/Admin)
+GET {{host}}/api/quizzes/1/stats
+Authorization: Bearer {{token}}
+
+### UC18 - Manage Users (Admin) – sort = newest | oldest | username
+GET {{host}}/api/admin/users?search=&page=1&pageSize=20&sort=username
 Authorization: Bearer {{adminToken}}
 
 ### UC19 - Manage System Quizzes (Admin)
-GET {{host}}/api/admin/quizzes
+GET {{host}}/api/admin/quizzes?page=1&pageSize=20
 Authorization: Bearer {{adminToken}}
 
 ### UC20 - Moderate Content: remove a Quiz (Admin)
@@ -202,3 +235,19 @@ Content-Type: application/json
 {
   "status": "Removed"
 }
+
+### UC20 - Danh sách câu hỏi để kiểm duyệt (Admin) – search theo nội dung, status = Active | Removed
+GET {{host}}/api/admin/questions?search=Angular&status=Active
+Authorization: Bearer {{adminToken}}
+
+### UC20 - Moderate Content: gỡ 1 Question (Admin) – câu bị gỡ biến mất khỏi quiz khi làm bài
+PUT {{host}}/api/admin/questions/1/status
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+  "status": "Removed"
+}
+
+### (Kiểm tra lỗi 1) Guest xem bank công khai -> KHÔNG còn thấy isCorrect
+GET {{host}}/api/question-banks/1/questions

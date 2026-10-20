@@ -4,210 +4,159 @@ import { RouterModule, ActivatedRoute, Router } from '@angular/router';
 import { QuizService } from '../../core/services/quiz.service';
 import { AuthService } from '../../core/services/auth.service';
 import { QuizDetail } from '../../core/models';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { SkeletonComponent } from '../../shared/skeleton.component';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { extractError } from '../../core/errors';
+import { isAxiosError } from 'axios';
 
 @Component({
   selector: 'app-quiz-detail',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, EmptyStateComponent, SkeletonComponent],
   template: `
-    <div style="background: #f8f9ff; min-height: 100vh; padding: 2rem 0;">
-      <div class="container">
-        <!-- Back Button -->
-        <a routerLink="/quiz/browse" class="btn btn-back mb-4">
-          ← Quay lại danh sách
-        </a>
+    <div class="page-container animate-fade-up">
+      <a routerLink="/quiz/browse" class="back-link">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i>Quay lại danh sách
+      </a>
 
-        <!-- Loading -->
-        <div *ngIf="isLoading" class="text-center py-5">
-          <div class="spinner-border" role="status" style="width: 3rem; height: 3rem; color: #667eea;">
-            <span class="visually-hidden">Loading...</span>
-          </div>
-          <p class="mt-3 text-muted fw-medium">Đang tải chi tiết...</p>
-        </div>
+      <app-skeleton *ngIf="isLoading" variant="detail"></app-skeleton>
 
-        <!-- Error -->
-        <div *ngIf="errorMessage" class="alert alert-danger rounded-3 shadow-sm border-0">
-          {{ errorMessage }}
-        </div>
+      <app-empty-state
+        *ngIf="!isLoading && errorMessage"
+        [icon]="notFound ? 'bi-journal-x' : 'bi-exclamation-triangle'"
+        [tone]="notFound ? 'neutral' : 'danger'"
+        [title]="notFound ? 'Quiz không còn khả dụng' : 'Không tải được quiz'"
+        [message]="errorMessage">
+        <button *ngIf="!notFound" type="button" class="btn btn-primary" (click)="loadQuizDetail()">
+          <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Thử lại
+        </button>
+        <a routerLink="/quiz/browse" class="btn btn-light">Về danh sách quiz</a>
+      </app-empty-state>
 
-        <!-- Content -->
-        <div *ngIf="quiz && !isLoading" class="row g-4">
-          <!-- Main Content -->
-          <div class="col-lg-8">
-            <div class="detail-card mb-4">
-              <div class="detail-card-body">
-                <h1 class="quiz-title mb-3">{{ quiz.title }}</h1>
-                <p class="quiz-desc mb-5">{{ quiz.description || 'Chưa có mô tả.' }}</p>
+      <div *ngIf="quiz && !isLoading" class="detail-grid">
+        <div class="main-col">
+          <section class="hero surface">
+            <span class="icon-tile hero-icon"><i class="bi bi-patch-question" aria-hidden="true"></i></span>
+            <h1 class="quiz-title">{{ quiz.title }}</h1>
+            <p class="quiz-desc" [class.is-empty]="!quiz.description">{{ quiz.description || 'Chưa có mô tả.' }}</p>
 
-                <!-- Stats Row -->
-                <div class="row g-3 mb-5">
-                  <div class="col-4">
-                    <div class="stat-box text-center p-3">
-                      <div class="stat-emoji"><i class="bi bi-file-earmark-text"></i></div>
-                      <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em;">Câu hỏi</small>
-                      <h4 class="fw-medium text-secondary mb-0 mt-1">{{ quiz.questions.length }}</h4>
-                    </div>
-                  </div>
-                  <div class="col-4">
-                    <div class="stat-box text-center p-3">
-                      <div class="stat-emoji"><i class="bi bi-stopwatch"></i></div>
-                      <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em;">Thời gian</small>
-                      <h4 class="fw-medium text-secondary mb-0 mt-1">{{ quiz.duration }} phút</h4>
-                    </div>
-                  </div>
-                  <div class="col-4">
-                    <div class="stat-box text-center p-3">
-                      <div class="stat-emoji"><i class="bi bi-person"></i></div>
-                      <small class="text-muted d-block fw-bold text-uppercase" style="font-size: 0.7rem; letter-spacing: 0.05em;">Tác giả</small>
-                      <h5 class="fw-medium text-secondary mb-0 mt-1 text-truncate" [title]="quiz.ownerUsername">{{ quiz.ownerUsername }}</h5>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Questions List -->
-                <h4 class="fw-medium text-secondary mb-4"><i class="bi bi-card-list"></i> Danh sách câu hỏi</h4>
-                <div class="d-flex flex-column gap-2">
-                  <div *ngFor="let q of quiz.questions; let i = index" class="question-row p-3">
-                    <div class="d-flex justify-content-between align-items-start gap-3">
-                      <div>
-                        <span class="q-index">{{ i + 1 }}</span>
-                        <span class="ms-2 fw-medium text-secondary">{{ q.content }}</span>
-                      </div>
-                      <span class="type-badge flex-shrink-0">{{ typeLabel(q.questionType) }}</span>
-                    </div>
-                  </div>
-                  <div *ngIf="quiz.questions.length === 0" class="text-center py-4 text-muted">
-                    Quiz này chưa có câu hỏi nào.
-                  </div>
-                </div>
+            <div class="stats">
+              <div class="stat-tile">
+                <div class="stat-label"><i class="bi bi-file-earmark-text me-1" aria-hidden="true"></i>Câu hỏi</div>
+                <div class="stat-value">{{ quiz.questions.length }}</div>
+              </div>
+              <div class="stat-tile">
+                <div class="stat-label"><i class="bi bi-stopwatch me-1" aria-hidden="true"></i>Thời gian</div>
+                <div class="stat-value">{{ quiz.duration }}<span class="unit">phút</span></div>
+              </div>
+              <div class="stat-tile">
+                <div class="stat-label"><i class="bi bi-person me-1" aria-hidden="true"></i>Tác giả</div>
+                <div class="stat-value owner text-truncate" [title]="quiz.ownerUsername">{{ quiz.ownerUsername }}</div>
               </div>
             </div>
-          </div>
+          </section>
 
-          <!-- Sidebar -->
-          <div class="col-lg-4">
-            <div class="sidebar-card sticky-top" style="top: 2rem;">
-              <div class="sidebar-accent"></div>
-              <div class="p-4">
-                <h4 class="fw-medium text-secondary mb-3">Sẵn sàng chưa?</h4>
-                <p class="text-muted mb-4" style="font-size: 0.9rem;">
-                  Bạn sẽ trả lời <strong class="text-secondary">{{ quiz.questions.length }} câu hỏi</strong> trong
-                  <strong class="text-secondary">{{ quiz.duration }} phút</strong>. Kết quả sẽ hiển thị ngay sau khi nộp.
-                </p>
-                <div class="d-grid">
-                  <button class="btn btn-start btn-lg" (click)="startQuiz()">
-                    {{ isLoggedIn ? '▶️ Bắt Đầu Làm Bài' : '▶️ Thử Miễn Phí' }}
-                  </button>
-                </div>
-                <div *ngIf="!isLoggedIn" class="guest-box mt-4 p-3 rounded-3">
-                  <div class="d-flex gap-2">
-                    <span>ℹ️</span>
-                    <small class="text-muted">
-                      Khách chỉ được làm thử tối đa <strong>3 lượt</strong>. Đăng ký để làm không giới hạn!
-                    </small>
-                  </div>
-                </div>
-              </div>
+          <section class="questions" aria-labelledby="q-heading">
+            <h2 id="q-heading" class="section-title">
+              <i class="bi bi-card-list me-2" aria-hidden="true"></i>Danh sách câu hỏi
+            </h2>
+            <ol class="q-list surface" *ngIf="quiz.questions.length > 0">
+              <li *ngFor="let q of quiz.questions; let i = index" class="q-row">
+                <span class="q-index tabular">{{ i + 1 }}</span>
+                <span class="q-content">{{ q.content }}</span>
+                <span class="chip flex-shrink-0">{{ typeLabel(q.questionType) }}</span>
+              </li>
+            </ol>
+            <div class="surface" *ngIf="quiz.questions.length === 0">
+              <app-empty-state
+                [compact]="true"
+                tone="neutral"
+                icon="bi-inbox"
+                title="Chưa có câu hỏi"
+                message="Quiz này chưa có câu hỏi nào.">
+              </app-empty-state>
+            </div>
+          </section>
+        </div>
+
+        <aside class="side-col">
+          <div class="cta-card surface">
+            <h2 class="cta-title">Sẵn sàng chưa?</h2>
+            <p class="cta-text">
+              Bạn sẽ trả lời <strong>{{ quiz.questions.length }} câu hỏi</strong> trong
+              <strong>{{ quiz.duration }} phút</strong>. Kết quả hiển thị ngay sau khi nộp bài.
+            </p>
+            <div class="d-grid gap-2">
+              <button type="button" class="btn btn-primary btn-lg" (click)="startQuiz()"
+                      [disabled]="quiz.questions.length === 0">
+                <i class="bi bi-play-fill me-1" aria-hidden="true"></i>{{ ctaLabel }}
+              </button>
+              <a routerLink="/quiz/browse" class="btn btn-light">Xem quiz khác</a>
+            </div>
+            <div *ngIf="!isLoggedIn" class="guest-note">
+              <i class="bi bi-info-circle" aria-hidden="true"></i>
+              <p>
+                Khách được làm thử tối đa <strong>3 lượt</strong>.
+                <a routerLink="/auth/register" [queryParams]="{ returnUrl: '/quiz/detail/' + quiz.quizId }">Tạo tài khoản</a> để làm không giới hạn và lưu lịch sử.
+              </p>
             </div>
           </div>
-        </div>
+        </aside>
       </div>
     </div>
   `,
   styles: [`
-    .btn-back {
-      background: white;
-      border: 1.5px solid #e8eaf6;
-      border-radius: 50px;
-      color: #6b7280;
-      font-weight: 500;
-      padding: 0.5rem 1.2rem;
-      transition: all 0.2s;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-      text-decoration: none;
+    .detail-grid { display: grid; gap: 1.5rem; grid-template-columns: 1fr; align-items: start; }
+    @media (min-width: 992px) { .detail-grid { grid-template-columns: minmax(0, 1fr) 340px; } }
+
+    .main-col { display: flex; flex-direction: column; gap: 1.75rem; min-width: 0; }
+
+    .hero { padding: 1.75rem 1.5rem; box-shadow: var(--shadow-sm); }
+    @media (min-width: 576px) { .hero { padding: 2.25rem 2.25rem; } }
+    .hero-icon { margin-bottom: 1rem; }
+    .quiz-title { font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2.1rem); margin: 0 0 0.6rem; }
+    .quiz-desc { color: var(--text-2); font-size: 1.02rem; line-height: 1.7; margin: 0 0 1.75rem; max-width: 65ch; }
+    .quiz-desc.is-empty { color: var(--text-muted); font-style: italic; }
+
+    .stats { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    .stats .stat-tile { background: var(--surface-2); border-color: transparent; min-width: 0; }
+    .stats .stat-label { margin-bottom: 0.25rem; }
+    .stats .unit { font-size: 0.9rem; font-weight: 700; color: var(--text-2); margin-left: 0.3rem; }
+    .stats .owner { font-size: 1.15rem; line-height: 1.6; }
+
+    .q-list { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+    .q-row {
+      display: flex; align-items: flex-start; gap: 0.85rem;
+      padding: 0.9rem 1.15rem; border-bottom: 1px solid var(--border);
+      transition: background-color var(--transition);
     }
-    .btn-back:hover { border-color: #667eea; color: #667eea; }
-
-    .detail-card {
-      background: white;
-      border-radius: 14px;
-      border: 1px solid #e8eaf6;
-      box-shadow: 0 2px 12px rgba(102,126,234,0.07);
-      overflow: hidden;
-    }
-    .detail-card-body { padding: 2.5rem; }
-
-    .quiz-title { font-size: 1.75rem; font-weight: 800; color: #1a1a2e; letter-spacing: -0.02em; }
-    .quiz-desc { color: #6b7280; font-size: 1.05rem; line-height: 1.7; }
-
-    .stat-box {
-      background: #f8f9ff;
-      border: 1px solid #e8eaf6;
-      border-radius: 12px;
-      transition: transform 0.2s;
-    }
-    .stat-box:hover { transform: translateY(-2px); }
-    .stat-emoji { font-size: 1.5rem; margin-bottom: 0.3rem; }
-
-    .question-row {
-      background: white;
-      border: 1px solid #e8eaf6;
-      border-left: 4px solid #667eea;
-      border-radius: 8px;
-      transition: background 0.15s;
-    }
-    .question-row:hover { background: #f8f9ff; }
-
+    .q-row:last-child { border-bottom: 0; }
+    .q-row:hover { background: var(--surface-2); }
     .q-index {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 24px;
-      height: 24px;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
-      border-radius: 50%;
-      font-size: 0.75rem;
-      font-weight: 700;
-      flex-shrink: 0;
+      width: 1.75rem; height: 1.75rem; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: var(--radius-pill);
+      background: var(--brand-soft); color: var(--brand-soft-text);
+      font-size: 0.78rem; font-weight: 700;
     }
+    .q-content { flex: 1; min-width: 0; color: var(--text); font-weight: 500; padding-top: 0.1rem; }
 
-    .type-badge {
-      background: #f1f3f9;
-      color: #4b5563;
-      border-radius: 6px;
-      padding: 0.25rem 0.6rem;
-      font-size: 0.78rem;
-      font-weight: 600;
-    }
+    .cta-card { padding: 1.5rem; box-shadow: var(--shadow-md); }
+    @media (min-width: 992px) { .cta-card { position: sticky; top: 5.5rem; } }
+    .cta-title { font-size: 1.25rem; margin: 0 0 0.5rem; }
+    .cta-text { color: var(--text-2); font-size: 0.9rem; margin: 0 0 1.25rem; }
+    .cta-text strong { color: var(--text); }
 
-    .sidebar-card {
-      background: white;
-      border-radius: 14px;
-      border: 1px solid #e8eaf6;
-      box-shadow: 0 2px 12px rgba(102,126,234,0.07);
-      overflow: hidden;
+    .guest-note {
+      display: flex; gap: 0.6rem; align-items: flex-start;
+      margin-top: 1.25rem; padding: 0.85rem 1rem;
+      background: var(--warning-soft); color: var(--warning);
+      border-radius: var(--radius-input); font-size: 0.85rem;
     }
-    .sidebar-accent {
-      height: 6px;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-    }
-
-    .btn-start {
-      background: linear-gradient(135deg, #43e97b, #38f9d7);
-      border: none;
-      border-radius: 10px;
-      color: #065f46;
-      font-weight: 700;
-      padding: 0.85rem;
-      transition: all 0.2s;
-      box-shadow: 0 3px 12px rgba(67,233,123,0.3);
-    }
-    .btn-start:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(67,233,123,0.4); color: #065f46; }
-
-    .guest-box { background: #fffbeb; border: 1px solid #fde68a; }
+    .guest-note p { margin: 0; color: var(--text); }
+    .guest-note a { font-weight: 700; }
   `]
 })
 export class QuizDetailComponent implements OnInit, OnDestroy {
@@ -215,6 +164,8 @@ export class QuizDetailComponent implements OnInit, OnDestroy {
   isLoading = false;
   errorMessage: string | null = null;
   isLoggedIn = false;
+  /** Quiz không tồn tại / đã xóa / không mở: không hiện nút "Thử lại" */
+  notFound = false;
   private destroy$ = new Subject<void>();
   private quizId!: number;
 
@@ -237,6 +188,7 @@ export class QuizDetailComponent implements OnInit, OnDestroy {
   loadQuizDetail(): void {
     this.isLoading = true;
     this.errorMessage = null;
+    this.notFound = false;
 
     this.quizService
       .getQuizDetail(this.quizId)
@@ -248,10 +200,26 @@ export class QuizDetailComponent implements OnInit, OnDestroy {
         },
         error: (err) => {
           this.isLoading = false;
-          this.errorMessage = err?.response?.data?.detail || 'Không thể tải chi tiết quiz.';
+          this.errorMessage = extractError(err, 'Không thể tải chi tiết quiz.');
+          const status = isAxiosError(err) ? err.response?.status : undefined;
+          this.notFound = status === 404 || status === 403;
           console.error(err);
         }
       });
+  }
+
+  /** Có lượt làm đang dở trong tab này (xem AttemptComponent) */
+  get hasActiveAttempt(): boolean {
+    try {
+      return !!sessionStorage.getItem(`quizapp-active-attempt-${this.quizId}`);
+    } catch {
+      return false;
+    }
+  }
+
+  get ctaLabel(): string {
+    if (this.hasActiveAttempt) return 'Tiếp tục bài đang làm';
+    return this.isLoggedIn ? 'Bắt đầu làm bài' : 'Làm thử';
   }
 
   startQuiz(): void {

@@ -18,3 +18,9 @@ public class AnswerRequest
 
     public bool IsCorrect { get; set; }
 }
+
+/// <summary>Một Answer trong ReplaceQuestionRequest: AnswerId null = đáp án mới.</summary>
+public class EditAnswerRequest : AnswerRequest
+{
+    public int? AnswerId { get; set; }
+}

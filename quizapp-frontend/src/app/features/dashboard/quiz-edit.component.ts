@@ -1,147 +1,147 @@
 // UC12 – Sửa quiz: đọc :id từ URL, nạp dữ liệu cũ vào form (patchValue), PUT khi lưu
 
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { QuizService } from '../../core/services/quiz.service';
-import { ProblemDetails } from '../../core/models';
+import { SkeletonComponent } from '../../shared/skeleton.component';
+import { EmptyStateComponent } from '../../shared/empty-state.component';
+import { DialogService } from '../../core/services/dialog.service';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { extractError } from '../../core/errors';
 
 @Component({
   selector: 'app-quiz-edit',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule],
+  imports: [CommonModule, ReactiveFormsModule, RouterModule, SkeletonComponent, EmptyStateComponent],
   template: `
-    <div class="page-bg min-vh-100 py-5">
-      <div class="container">
-        <div class="row justify-content-center">
-          <div class="col-lg-7">
-            <!-- Back -->
-            <a routerLink="/dashboard/my-quizzes" class="btn btn-back mb-4">
-              ← Quay lại Quiz Của Tôi
-            </a>
+    <div class="page-container-narrow animate-fade-up">
+      <a routerLink="/dashboard/my-quizzes" class="back-link">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i>Quiz của tôi
+      </a>
 
-            <div class="form-card">
-              <div class="form-card-accent"></div>
-              <div class="p-4 p-md-5">
-                <h2 class="mb-4 text-secondary fw-bold"><i class="bi bi-pencil"></i> Sửa Quiz</h2>
+      <header class="page-header">
+        <div>
+          <h1>Sửa quiz</h1>
+          <p class="page-subtitle">Cập nhật tiêu đề, mô tả và thời gian làm bài.</p>
+        </div>
+      </header>
 
-                <div *ngIf="isLoading" class="text-center py-5">
-                  <div class="spinner-border" role="status" style="color: #667eea;"></div>
-                </div>
+      <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+        <div>{{ errorMessage }}</div>
+        <button type="button" class="btn-close" aria-label="Đóng" (click)="errorMessage = null"></button>
+      </div>
 
-                <!-- Error -->
-                <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show rounded-3 border-0">
-                  {{ errorMessage }}
-                  <button type="button" class="btn-close" (click)="errorMessage = null"></button>
-                </div>
+      <app-skeleton *ngIf="isLoading" variant="detail"></app-skeleton>
 
-                <form *ngIf="!isLoading" [formGroup]="quizForm" (ngSubmit)="onSubmit()">
-                  <div class="mb-4">
-                    <label class="form-label">Tiêu đề <span class="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      class="form-control"
-                      formControlName="title"
-                      [class.is-invalid]="isFieldInvalid('title')"
-                    />
-                    <div *ngIf="isFieldInvalid('title')" class="invalid-feedback d-block">
-                      Tiêu đề là bắt buộc, tối đa 255 ký tự
-                    </div>
-                  </div>
+      <div *ngIf="!isLoading && loadError" class="surface">
+        <app-empty-state tone="danger" icon="bi-wifi-off" title="Không tải được quiz" [message]="loadError">
+          <button type="button" class="btn btn-primary" (click)="loadQuiz()">
+            <i class="bi bi-arrow-clockwise me-1" aria-hidden="true"></i>Thử lại
+          </button>
+          <a class="btn btn-light" routerLink="/dashboard/my-quizzes">Về Quiz của tôi</a>
+        </app-empty-state>
+      </div>
 
-                  <div class="mb-4">
-                    <label class="form-label">Mô tả</label>
-                    <textarea
-                      class="form-control"
-                      rows="4"
-                      formControlName="description"
-                      [class.is-invalid]="isFieldInvalid('description')"
-                    ></textarea>
-                  </div>
+      <form *ngIf="!isLoading && !loadError" [formGroup]="quizForm" (ngSubmit)="onSubmit()" novalidate>
+        <section class="surface form-section">
+          <h2 class="section-title">Thông tin chung</h2>
 
-                  <div class="mb-5">
-                    <label class="form-label">Thời gian làm bài (phút) <span class="text-danger">*</span></label>
-                    <input
-                      type="number"
-                      class="form-control"
-                      style="max-width: 180px;"
-                      formControlName="duration"
-                      min="1"
-                      max="600"
-                      [class.is-invalid]="isFieldInvalid('duration')"
-                    />
-                    <div *ngIf="isFieldInvalid('duration')" class="invalid-feedback d-block">
-                      Thời gian phải từ 1 đến 600 phút
-                    </div>
-                  </div>
-
-                  <div class="d-flex gap-3 align-items-center">
-                    <button
-                      type="submit"
-                      class="btn btn-gradient px-4"
-                      [disabled]="isSubmitting || quizForm.invalid"
-                    >
-                      <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                      {{ isSubmitting ? 'Đang lưu...' : 'Lưu Thay Đổi' }}
-                    </button>
-                    <a routerLink="/dashboard/my-quizzes" class="btn btn-outline-secondary rounded-3 px-4">Hủy</a>
-                  </div>
-                </form>
-              </div>
+          <div class="mb-3">
+            <label for="editTitle" class="form-label">Tiêu đề <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(bắt buộc)</span></label>
+            <input
+              type="text"
+              id="editTitle"
+              class="form-control"
+              formControlName="title"
+              [attr.aria-describedby]="isFieldInvalid('title') ? 'editTitleError editTitleHelp' : 'editTitleHelp'"
+              [attr.aria-invalid]="isFieldInvalid('title') ? true : null"
+              [class.is-invalid]="isFieldInvalid('title')"
+            />
+            <div id="editTitleHelp" class="form-text">Tối đa 255 ký tự.</div>
+            <div *ngIf="isFieldInvalid('title')" id="editTitleError" class="invalid-feedback d-block">
+              Tiêu đề là bắt buộc, tối đa 255 ký tự
             </div>
           </div>
+
+          <div>
+            <label for="editDescription" class="form-label">Mô tả</label>
+            <textarea
+              id="editDescription"
+              class="form-control"
+              rows="4"
+              formControlName="description"
+              [attr.aria-describedby]="isFieldInvalid('description') ? 'editDescriptionError editDescriptionHelp' : 'editDescriptionHelp'"
+              [attr.aria-invalid]="isFieldInvalid('description') ? true : null"
+              [class.is-invalid]="isFieldInvalid('description')"
+            ></textarea>
+            <div id="editDescriptionHelp" class="form-text">Không bắt buộc, tối đa 2000 ký tự.</div>
+            <div *ngIf="isFieldInvalid('description')" id="editDescriptionError" class="invalid-feedback d-block">
+              Mô tả tối đa 2000 ký tự
+            </div>
+          </div>
+        </section>
+
+        <section class="surface form-section">
+          <h2 class="section-title">Cài đặt</h2>
+
+          <label for="editDuration" class="form-label">Thời gian làm bài <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(bắt buộc)</span></label>
+          <div class="input-group duration-group">
+            <input
+              type="number"
+              id="editDuration"
+              class="form-control"
+              formControlName="duration"
+              min="1"
+              max="600"
+              [attr.aria-describedby]="isFieldInvalid('duration') ? 'editDurationError editDurationHelp' : 'editDurationHelp'"
+              [attr.aria-invalid]="isFieldInvalid('duration') ? true : null"
+              [class.is-invalid]="isFieldInvalid('duration')"
+            />
+            <span class="input-group-text">phút</span>
+          </div>
+          <div id="editDurationHelp" class="form-text">Từ 1 đến 600 phút.</div>
+          <div *ngIf="isFieldInvalid('duration')" id="editDurationError" class="invalid-feedback d-block">
+            Thời gian phải từ 1 đến 600 phút
+          </div>
+        </section>
+
+        <div class="form-actions">
+          <a routerLink="/dashboard/my-quizzes" class="btn btn-light">Hủy</a>
+          <button type="submit" class="btn btn-primary" [disabled]="isSubmitting || quizForm.invalid">
+            <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            {{ isSubmitting ? 'Đang lưu…' : 'Lưu thay đổi' }}
+          </button>
         </div>
-      </div>
+      </form>
     </div>
   `,
   styles: [`
-    .page-bg { background-color: #f8f9ff; }
+    .form-section { padding: 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm); }
+    .req { color: var(--danger); }
+    .duration-group { max-width: 220px; }
+    .duration-group .form-control { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .duration-group .input-group-text { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; }
 
-    .btn-back {
-      background: white;
-      border: 1.5px solid #e8eaf6;
-      border-radius: 50px;
-      color: #6b7280;
-      font-weight: 500;
-      text-decoration: none;
-      padding: 0.45rem 1rem;
-      transition: all 0.2s;
+    .form-actions {
+      display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap;
+      margin-top: 1.25rem;
     }
-    .btn-back:hover { border-color: #667eea; color: #667eea; }
-
-    .form-card {
-      background: white;
-      border-radius: 14px;
-      border: 1px solid #e8eaf6;
-      box-shadow: 0 2px 12px rgba(102,126,234,0.07);
-      overflow: hidden;
+    @media (max-width: 575.98px) {
+      .form-section { padding: 1.15rem; }
     }
-    .form-card-accent {
-      height: 5px;
-      background: linear-gradient(135deg, #667eea, #764ba2);
-    }
-
-    .btn-gradient {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      padding: 0.65rem 1.5rem;
-      transition: all 0.2s;
-    }
-    .btn-gradient:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); color: white; }
-    .btn-gradient:disabled { opacity: 0.65; }
   `]
 })
 export class QuizEditComponent implements OnInit, OnDestroy {
+  private dialog = inject(DialogService);
   quizForm: FormGroup;
   isLoading = false;
   isSubmitting = false;
   errorMessage: string | null = null;
+  loadError: string | null = null;
   private quizId!: number;
   private destroy$ = new Subject<void>();
 
@@ -168,6 +168,8 @@ export class QuizEditComponent implements OnInit, OnDestroy {
   // Nạp dữ liệu hiện tại vào form — điểm khác biệt chính so với form tạo mới
   loadQuiz(): void {
     this.isLoading = true;
+    this.loadError = null;
+    this.errorMessage = null;
     this.quizService
       .getQuizDetail(this.quizId)
       .pipe(takeUntil(this.destroy$))
@@ -183,7 +185,7 @@ export class QuizEditComponent implements OnInit, OnDestroy {
         },
         error: (err) => {
           this.isLoading = false;
-          this.errorMessage = err?.response?.data?.detail || 'Không thể tải quiz.';
+          this.loadError = extractError(err, 'Quiz không tồn tại hoặc bạn không có quyền chỉnh sửa.');
         }
       });
   }
@@ -209,13 +211,13 @@ export class QuizEditComponent implements OnInit, OnDestroy {
       })
       .pipe(takeUntil(this.destroy$))
       .subscribe({
-        next: () => this.router.navigate(['/dashboard/my-quizzes']),
+        next: () => {
+          this.dialog.toast('Đã lưu thay đổi của quiz.');
+          this.router.navigate(['/dashboard/my-quizzes']);
+        },
         error: (err) => {
           this.isSubmitting = false;
-          const data: ProblemDetails | undefined = err?.response?.data;
-          this.errorMessage = data?.errors
-            ? Object.values(data.errors).flat().join(' ')
-            : data?.detail || 'Lưu thất bại.';
+          this.errorMessage = extractError(err, 'Lưu thất bại.');
         }
       });
   }

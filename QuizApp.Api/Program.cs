@@ -1,12 +1,16 @@
 // File khởi động của API
 // Bật server lên, khai báo những thứ API cần dùng
 
+using System.Security.Claims;
 using System.Text;
 using System.Text.Json.Serialization;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using QuizApp.Api.Controllers;
 using QuizApp.Api.Data;
+using QuizApp.Api.Enums;
 using QuizApp.Api.Security;
 using Scalar.AspNetCore;   // giao diện tài liệu API (thay cho Swagger UI)
 
@@ -24,8 +28,60 @@ builder.Services
     });
 
 // Lỗi bất ngờ (mất kết nối DB, lỗi SQL...) trả về JSON chuẩn RFC 7807 (status 500)
-// thay vì response rỗng - đáp ứng các alternative flow "data cannot be retrieved / processed" trong SRS
-builder.Services.AddProblemDetails();
+// thay vì response rỗng - đáp ứng các alternative flow "data cannot be retrieved / processed" trong SRS.
+// Mọi ProblemDetails đều có extensions["code"] (A2): lỗi validate -> VALIDATION_FAILED,
+// lỗi chưa gắn code (401 của JWT, 404 route, 500...) -> mã mặc định theo status (ErrorCodes.ForStatus).
+// Controller gắn code cụ thể qua this.ApiProblem(...) — code đó ghi đè mã mặc định ở đây.
+builder.Services.AddProblemDetails(options =>
+{
+    options.CustomizeProblemDetails = context =>
+    {
+        var problem = context.ProblemDetails;
+        if (problem.Extensions.ContainsKey("code")) return;
+
+        problem.Extensions["code"] = problem is HttpValidationProblemDetails
+            ? ErrorCodes.ValidationFailed
+            : ErrorCodes.ForStatus(problem.Status ?? context.HttpContext.Response.StatusCode);
+    };
+});
+
+// A1 – Rate limiting theo IP (built-in Microsoft.AspNetCore.RateLimiting):
+// - "auth" : login/register, 5 request / phút / IP (chống dò mật khẩu).
+// - "trial": POST quizzes/{id}/trial, 10 request / giờ / IP (Guest đổi X-Guest-Id cũng không làm thử vô hạn).
+// Bị chặn -> 429 + ProblemDetails code RATE_LIMITED + header Retry-After (giây).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    static string ClientIp(HttpContext http) => http.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    options.AddPolicy("auth", http => RateLimitPartition.GetFixedWindowLimiter(ClientIp(http),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 5, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+
+    options.AddPolicy("trial", http => RateLimitPartition.GetFixedWindowLimiter(ClientIp(http),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromHours(1), QueueLimit = 0 }));
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var http = context.HttpContext;
+        http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+            http.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+
+        var problemDetails = http.RequestServices.GetRequiredService<IProblemDetailsService>();
+        await problemDetails.WriteAsync(new ProblemDetailsContext
+        {
+            HttpContext = http,
+            ProblemDetails =
+            {
+                Status = StatusCodes.Status429TooManyRequests,
+                Title = "Too Many Requests",
+                Detail = "Too many requests. Please try again later.",
+                Extensions = { ["code"] = ErrorCodes.RateLimited }
+            }
+        });
+    };
+});
 
 // Swashbuckle vẫn SINH file OpenAPI (mô tả các endpoint); giao diện hiển thị là Scalar (xem bên dưới)
 builder.Services.AddEndpointsApiExplorer();
@@ -52,8 +108,22 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<QuizDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("QuizDb")));
 
-// Xác thực bằng JWT Bearer (UC01/UC02/UC03) — cấu hình khoá/issuer/audience trong appsettings.json -> Jwt
+// Xác thực bằng JWT Bearer (UC01/UC02/UC03) — issuer/audience trong appsettings.json -> Jwt.
+// A1 – Jwt:Key KHÔNG nằm trong appsettings.json: lấy từ user-secrets / biến môi trường (Jwt__Key);
+// Development có key dev riêng trong appsettings.Development.json. Thiếu / quá ngắn / còn placeholder -> dừng khởi động.
 var jwtSection = builder.Configuration.GetSection("Jwt");
+var jwtKey = jwtSection["Key"];
+if (string.IsNullOrWhiteSpace(jwtKey)
+    || Encoding.UTF8.GetByteCount(jwtKey) < 32
+    || jwtKey.Contains("CHANGE_THIS", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        "Jwt:Key is missing, shorter than 32 bytes, or still a placeholder. " +
+        "Set it with `dotnet user-secrets set \"Jwt:Key\" \"<random 32+ chars>\"` or the Jwt__Key environment variable.");
+}
+// Cùng MỘT khoá cho ký (JwtTokenService) và xác thực (JwtBearer) — xem JwtSigningKey.
+var signingKey = new JwtSigningKey(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)));
+builder.Services.AddSingleton(signingKey);
 builder.Services
     .AddAuthentication(options =>
     {
@@ -70,19 +140,48 @@ builder.Services
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtSection["Issuer"],
             ValidAudience = jwtSection["Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSection["Key"]!))
+            IssuerSigningKey = signingKey.Key
+        };
+
+        // UC18 – JWT là stateless nên token cấp TRƯỚC khi bị khoá vẫn còn hạn (tới 480 phút).
+        // Mỗi request có token, đọc lại trạng thái tài khoản trong DB: bị khoá / không còn tồn tại -> 401 ngay.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var idClaim = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(idClaim, out var userId))
+                {
+                    context.Fail("Invalid token.");
+                    return;
+                }
+
+                var db = context.HttpContext.RequestServices.GetRequiredService<QuizDbContext>();
+                var status = await db.Users.AsNoTracking()
+                    .Where(u => u.UserId == userId)
+                    .Select(u => (AccountStatus?)u.Status)
+                    .FirstOrDefaultAsync();
+
+                if (status is null)
+                    context.Fail("Account no longer exists.");
+                else if (status == AccountStatus.Blocked)
+                    context.Fail("This account has been blocked by an administrator.");
+            }
         };
     });
 
 builder.Services.AddAuthorization();
 builder.Services.AddScoped<JwtTokenService>();
 
+// A1 – danh sách origin được phép đọc từ cấu hình Cors:Origins (mảng); Development mặc định http://localhost:4200.
+var corsOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>() ?? Array.Empty<string>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AngularClient", policy => policy
-        .WithOrigins("http://localhost:4200")
+        .WithOrigins(corsOrigins)
         .AllowAnyHeader()
-        .AllowAnyMethod());
+        .AllowAnyMethod()
+        .WithExposedHeaders("Retry-After"));
 });
 
 // Build the application
@@ -91,15 +190,27 @@ var app = builder.Build();
 
 // Bắt mọi exception chưa xử lý -> trả ProblemDetails (đi cùng AddProblemDetails ở trên)
 app.UseExceptionHandler();
+// Response lỗi không có body (401/403 của JWT, 404 route không tồn tại, 405...) -> ProblemDetails có code
+app.UseStatusCodePages();
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<QuizDbContext>();
 
-    // Tạo database và toàn bộ bảng nếu chưa tồn tại
-    db.Database.EnsureCreated();
-    // Seed dữ liệu mẫu (admin/user/question bank/quiz) nếu database trống
-    DbSeeder.Seed(db);
+    // A1 – áp dụng EF Migrations (thay cho EnsureCreated): tạo DB / cập nhật cấu trúc bảng tự động
+    db.Database.Migrate();
+
+    // Seed dữ liệu mẫu (admin/user/question bank/quiz) nếu database trống — CHỈ ở Development,
+    // mật khẩu lấy từ cấu hình Seed:AdminPassword / Seed:UserPassword.
+    if (app.Environment.IsDevelopment())
+    {
+        var adminPassword = app.Configuration["Seed:AdminPassword"];
+        var userPassword = app.Configuration["Seed:UserPassword"];
+        if (string.IsNullOrWhiteSpace(adminPassword) || string.IsNullOrWhiteSpace(userPassword))
+            app.Logger.LogWarning("Seed:AdminPassword / Seed:UserPassword is not configured - skipping sample data seeding.");
+        else
+            DbSeeder.Seed(db, adminPassword, userPassword);
+    }
 }
 
 if (app.Environment.IsDevelopment())
@@ -113,6 +224,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AngularClient");
+
+// Rate limiting theo policy gắn trên endpoint ([EnableRateLimiting("auth")] / ("trial"))
+app.UseRateLimiter();
 
 // Xác thực trước, phân quyền sau — bắt buộc theo đúng thứ tự middleware của ASP.NET Core
 app.UseAuthentication();

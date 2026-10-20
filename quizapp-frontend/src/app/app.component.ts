@@ -1,415 +1,206 @@
 import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterOutlet, RouterModule, Router } from '@angular/router';
+import { RouterOutlet, RouterModule, Router, NavigationEnd } from '@angular/router';
 import { AuthService } from './core/services/auth.service';
+import { ThemeService, ThemePreference } from './core/services/theme.service';
+import { DialogHostComponent } from './shared/dialog-host.component';
 import { User } from './core/models';
 import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { filter, takeUntil } from 'rxjs/operators';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterModule],
+  imports: [CommonModule, RouterOutlet, RouterModule, DialogHostComponent],
+
   template: `
-    <nav class="app-navbar navbar navbar-expand-lg">
-      <div class="container-fluid px-4">
-        <a class="navbar-brand" routerLink="/quiz/browse">
-          <span class="brand-icon"><i class="bi bi-lightning-fill"></i></span>
-          <span class="brand-text">QuizApp</span>
-        </a>
+    <a class="skip-link" href="#main-content">Bỏ qua tới nội dung</a>
+    <app-dialog-host></app-dialog-host>
 
-        <button class="navbar-toggler-custom" type="button"
-          data-bs-toggle="collapse" data-bs-target="#navbarNav">
-          <span></span><span></span><span></span>
+    <div class="app-wrapper">
+      <!-- Sidebar (desktop) -->
+      <aside class="app-sidebar d-none d-lg-flex flex-column" aria-label="Điều hướng chính">
+        <div class="sidebar-brand">
+          <ng-container *ngTemplateOutlet="brand"></ng-container>
+        </div>
+        <nav class="sidebar-nav flex-grow-1">
+          <ng-container *ngTemplateOutlet="navLinks; context: { mobile: false }"></ng-container>
+        </nav>
+        <div class="sidebar-footer">
+          <ng-container *ngTemplateOutlet="footer; context: { mobile: false }"></ng-container>
+        </div>
+      </aside>
+
+      <!-- Content -->
+      <div class="app-content-wrapper flex-grow-1">
+        <header class="app-mobile-header d-lg-none">
+          <ng-container *ngTemplateOutlet="brand"></ng-container>
+          <button class="btn btn-light btn-icon" type="button" data-bs-toggle="offcanvas"
+                  data-bs-target="#mobileSidebar" aria-controls="mobileSidebar" aria-label="Mở menu">
+            <i class="bi bi-list fs-5"></i>
+          </button>
+        </header>
+
+        <main id="main-content" class="app-main" tabindex="-1">
+          <router-outlet></router-outlet>
+        </main>
+      </div>
+    </div>
+
+    <!-- Mobile offcanvas -->
+    <div class="offcanvas offcanvas-start" tabindex="-1" id="mobileSidebar" aria-label="Menu">
+      <div class="offcanvas-header">
+        <ng-container *ngTemplateOutlet="brand"></ng-container>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Đóng menu"></button>
+      </div>
+      <div class="offcanvas-body d-flex flex-column p-0">
+        <nav class="sidebar-nav flex-grow-1">
+          <ng-container *ngTemplateOutlet="navLinks; context: { mobile: true }"></ng-container>
+        </nav>
+        <div class="sidebar-footer">
+          <ng-container *ngTemplateOutlet="footer; context: { mobile: true }"></ng-container>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Shared templates ── -->
+    <ng-template #brand>
+      <a routerLink="/quiz/browse" class="brand" aria-label="QuizApp — trang chủ">
+        <span class="brand-mark" aria-hidden="true">Q</span>
+        <span class="brand-name">QuizApp</span>
+      </a>
+    </ng-template>
+
+    <ng-template #navLinks let-mobile="mobile">
+      <ul class="nav-list">
+        <ng-container *ngFor="let item of mainNav">
+          <li *ngIf="!item.auth || isLoggedIn">
+            <a class="nav-item-link" [routerLink]="item.link" routerLinkActive="active"
+               [attr.data-bs-dismiss]="mobile ? 'offcanvas' : null">
+              <i class="bi" [ngClass]="item.icon"></i><span>{{ item.label }}</span>
+            </a>
+          </li>
+        </ng-container>
+      </ul>
+
+      <ng-container *ngIf="isAdmin">
+        <p class="nav-group-label">Quản trị</p>
+        <ul class="nav-list">
+          <li *ngFor="let item of adminNav">
+            <a class="nav-item-link" [routerLink]="item.link" routerLinkActive="active"
+               [attr.data-bs-dismiss]="mobile ? 'offcanvas' : null">
+              <i class="bi" [ngClass]="item.icon"></i><span>{{ item.label }}</span>
+            </a>
+          </li>
+        </ul>
+      </ng-container>
+    </ng-template>
+
+    <ng-template #footer let-mobile="mobile">
+      <div class="theme-switch" role="radiogroup" aria-label="Giao diện">
+        <button *ngFor="let opt of themeOptions" type="button" role="radio"
+                [attr.aria-checked]="theme.preference() === opt.value"
+                [class.active]="theme.preference() === opt.value"
+                (click)="setTheme(opt.value)" [title]="opt.label">
+          <i class="bi" [ngClass]="opt.icon"></i><span>{{ opt.label }}</span>
         </button>
-
-        <div class="collapse navbar-collapse" id="navbarNav">
-          <ul class="nav-links mx-auto">
-            <li>
-              <a class="nav-item-link" routerLink="/quiz/browse" routerLinkActive="active">
-                <span class="nav-icon"><i class="bi bi-house-door"></i></span> Khám phá
-              </a>
-            </li>
-            <li *ngIf="isLoggedIn">
-              <a class="nav-item-link" routerLink="/dashboard/my-quizzes" routerLinkActive="active">
-                <span class="nav-icon"><i class="bi bi-card-list"></i></span> Quiz Của Tôi
-              </a>
-            </li>
-            <li *ngIf="isLoggedIn">
-              <a class="nav-item-link" routerLink="/dashboard/question-banks" routerLinkActive="active">
-                <span class="nav-icon"><i class="bi bi-archive"></i></span> Ngân Hàng
-              </a>
-            </li>
-            <li *ngIf="isAdmin">
-              <a class="nav-item-link admin-link" routerLink="/admin/users" routerLinkActive="active">
-                <span class="nav-icon"><i class="bi bi-people"></i></span> Users
-              </a>
-            </li>
-            <li *ngIf="isAdmin">
-              <a class="nav-item-link admin-link" routerLink="/admin/quizzes" routerLinkActive="active">
-                <span class="nav-icon"><i class="bi bi-shield-check"></i></span> Kiểm Duyệt
-              </a>
-            </li>
-          </ul>
-
-          <div class="nav-actions">
-            <div *ngIf="!isLoggedIn" class="d-flex gap-2">
-              <a class="btn-nav-outline" routerLink="/auth/login">Đăng Nhập</a>
-              <a class="btn-nav-primary" routerLink="/auth/register">Đăng Ký</a>
-            </div>
-
-            <div *ngIf="isLoggedIn" class="dropdown">
-              <button class="btn-user dropdown-toggle" type="button" data-bs-toggle="dropdown">
-                <span class="user-avatar">{{ currentUser?.username?.[0]?.toUpperCase() }}</span>
-                <span class="user-name">{{ currentUser?.username }}</span>
-              </button>
-              <ul class="dropdown-menu dropdown-menu-end">
-                <li class="dropdown-header-info">
-                  <small class="text-muted d-block">Đăng nhập với</small>
-                  <strong>{{ currentUser?.username }}</strong>
-                </li>
-                <li><hr class="dropdown-divider" /></li>
-                <li>
-                  <a class="dropdown-item" routerLink="/dashboard/my-quizzes">
-                    <i class="bi bi-card-list"></i> Dashboard
-                  </a>
-                </li>
-                <li *ngIf="isAdmin">
-                  <a class="dropdown-item" routerLink="/admin/users">
-                    <i class="bi bi-shield-check"></i> Quản trị
-                  </a>
-                </li>
-                <li><hr class="dropdown-divider" /></li>
-                <li>
-                  <a class="dropdown-item text-danger" style="cursor:pointer" (click)="logout()">
-                    🚪 Đăng Xuất
-                  </a>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
       </div>
-    </nav>
 
-    <main class="app-main">
-      <router-outlet></router-outlet>
-    </main>
-
-    <footer class="app-footer">
-      <div class="container">
-        <div class="footer-content">
-          <div class="footer-brand">
-            <span class="brand-icon"><i class="bi bi-lightning-fill"></i></span>
-            <span class="brand-text">QuizApp</span>
-          </div>
-          <p class="footer-text">© 2024 QuizApp — Nền tảng học tập thông minh</p>
-          <div class="footer-links">
-            <a routerLink="/quiz/browse">Khám phá Quiz</a>
-          </div>
-        </div>
+      <div *ngIf="!isLoggedIn" class="d-grid gap-2">
+        <a class="btn btn-primary" routerLink="/auth/register" [attr.data-bs-dismiss]="mobile ? 'offcanvas' : null">Tạo tài khoản</a>
+        <a class="btn btn-light" routerLink="/auth/login" [attr.data-bs-dismiss]="mobile ? 'offcanvas' : null">Đăng nhập</a>
       </div>
-    </footer>
+
+      <div *ngIf="isLoggedIn" class="user-card">
+        <span class="user-avatar" aria-hidden="true">{{ currentUser?.username?.[0]?.toUpperCase() }}</span>
+        <div class="user-meta">
+          <span class="user-name text-truncate">{{ currentUser?.username }}</span>
+          <span class="user-role">{{ isAdmin ? 'Quản trị viên' : 'Thành viên' }}</span>
+        </div>
+        <button type="button" class="btn btn-light btn-icon" (click)="logout()" title="Đăng xuất"
+                aria-label="Đăng xuất" [attr.data-bs-dismiss]="mobile ? 'offcanvas' : null">
+          <i class="bi bi-box-arrow-right"></i>
+        </button>
+      </div>
+    </ng-template>
   `,
-  styles: [
-    `
-      :host {
-        display: flex;
-        flex-direction: column;
-        min-height: 100vh;
-      }
+  styles: [`
+    :host { display: block; height: 100dvh; overflow: hidden; }
+    .app-wrapper { display: flex; height: 100dvh; width: 100%; background: var(--bg); }
 
-      .app-navbar {
-        position: sticky;
-        top: 0;
-        z-index: 1030;
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(20px);
-        -webkit-backdrop-filter: blur(20px);
-        border-bottom: 1px solid rgba(102, 126, 234, 0.12);
-        box-shadow: 0 2px 20px rgba(102, 126, 234, 0.08);
-        padding: 0.75rem 0;
-        display: flex;
-        align-items: center;
-      }
+    /* Sidebar */
+    .app-sidebar {
+      width: 264px; flex-shrink: 0; z-index: var(--z-sidebar);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+    }
+    .sidebar-brand { padding: 1.25rem 1.25rem 0.75rem; }
+    .sidebar-nav { padding: 0.5rem 0.85rem; overflow-y: auto; }
+    .sidebar-footer { padding: 0.85rem; border-top: 1px solid var(--border); display: grid; gap: 0.75rem; }
 
-      .app-navbar .container-fluid {
-        display: flex;
-        align-items: center;
-        width: 100%;
-      }
+    .brand { display: inline-flex; align-items: center; gap: 0.6rem; text-decoration: none; color: var(--text); }
+    .brand-mark {
+      width: 36px; height: 36px; border-radius: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--brand-500); color: var(--brand-contrast);
+      font-family: var(--font-display); font-weight: 800; font-size: 1.15rem;
+      transform: rotate(-6deg);
+      box-shadow: 0 3px 0 rgba(var(--brand-rgb), 0.25);
+    }
+    .brand-name { font-family: var(--font-display); font-weight: 800; font-size: 1.2rem; letter-spacing: -0.02em; }
 
-      .navbar-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        text-decoration: none;
-        flex-shrink: 0;
-      }
+    .nav-list { list-style: none; margin: 0 0 0.75rem; padding: 0; display: grid; gap: 2px; }
+    .nav-group-label { font-size: 0.75rem; font-weight: 600; color: var(--text-muted); margin: 0.75rem 0 0.35rem; padding: 0 0.75rem; }
+    .nav-item-link {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.6rem 0.75rem; border-radius: 12px;
+      color: var(--text-2); font-weight: 600; font-size: 0.92rem; text-decoration: none;
+      transition: background-color var(--transition), color var(--transition);
+    }
+    .nav-item-link i { font-size: 1.1rem; width: 1.25rem; text-align: center; }
+    .nav-item-link:hover { background: var(--surface-2); color: var(--text); }
+    .nav-item-link.active { background: var(--brand-soft); color: var(--brand-soft-text); }
+    .nav-item-link.active i { color: var(--brand-500); }
 
-      .brand-icon {
-        width: 36px;
-        height: 36px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.1rem;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-      }
+    /* Theme segmented control */
+    .theme-switch { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; padding: 3px; background: var(--surface-2); border-radius: var(--radius-pill); }
+    .theme-switch button {
+      border: 0; background: transparent; color: var(--text-2);
+      border-radius: var(--radius-pill); padding: 0.35rem 0.25rem;
+      font-size: 0.75rem; font-weight: 600;
+      display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
+      transition: background-color var(--transition), color var(--transition);
+    }
+    .theme-switch button:hover { color: var(--text); }
+    .theme-switch button.active { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
 
-      .brand-text {
-        font-size: 1.3rem;
-        font-weight: 800;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        letter-spacing: -0.03em;
-      }
+    .user-card { display: flex; align-items: center; gap: 0.65rem; padding: 0.4rem 0.25rem 0.1rem 0.4rem; }
+    .user-avatar {
+      width: 36px; height: 36px; border-radius: 12px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--brand-soft); color: var(--brand-soft-text); font-weight: 800; font-family: var(--font-display);
+    }
+    .user-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+    .user-name { font-weight: 600; color: var(--text); font-size: 0.9rem; }
+    .user-role { font-size: 0.75rem; color: var(--text-muted); }
 
-      .nav-links {
-        display: flex;
-        align-items: center;
-        list-style: none;
-        margin: 0;
-        padding: 0;
-        gap: 0.25rem;
-      }
+    /* Content */
+    .app-content-wrapper { min-width: 0; height: 100dvh; overflow-y: auto; display: flex; flex-direction: column; }
+    .app-mobile-header {
+      position: sticky; top: 0; z-index: 1010;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1rem;
+      background: color-mix(in srgb, var(--surface) 88%, transparent);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+    }
+    .app-main { flex-grow: 1; padding: 1.25rem 1rem 3rem; outline: none; }
+    @media (min-width: 768px) { .app-main { padding: 2rem 2rem 4rem; } }
+    @media (min-width: 1200px) { .app-main { padding: 2.25rem 3rem 4rem; } }
 
-      .nav-item-link {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        padding: 0.5rem 0.85rem;
-        border-radius: 8px;
-        text-decoration: none;
-        color: #6b7280;
-        font-weight: 500;
-        font-size: 0.9rem;
-        transition: all 0.2s ease;
-        white-space: nowrap;
-      }
-
-      .nav-item-link:hover {
-        background: rgba(102, 126, 234, 0.08);
-        color: #667eea;
-      }
-
-      .nav-item-link.active {
-        background: rgba(102, 126, 234, 0.1);
-        color: #667eea;
-        font-weight: 700;
-      }
-
-      .nav-icon { font-size: 0.9rem; }
-
-      .admin-link { color: #f59e0b; }
-      .admin-link:hover, .admin-link.active {
-        background: rgba(245, 158, 11, 0.1);
-        color: #d97706;
-      }
-
-      .nav-actions {
-        display: flex;
-        align-items: center;
-        flex-shrink: 0;
-      }
-
-      .btn-nav-outline {
-        padding: 0.45rem 1rem;
-        border: 1.5px solid #667eea;
-        color: #667eea;
-        background: transparent;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.875rem;
-        text-decoration: none;
-        transition: all 0.2s;
-        white-space: nowrap;
-      }
-
-      .btn-nav-outline:hover {
-        background: rgba(102, 126, 234, 0.08);
-        color: #667eea;
-      }
-
-      .btn-nav-primary {
-        padding: 0.45rem 1.1rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.875rem;
-        text-decoration: none;
-        transition: all 0.2s;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.35);
-        white-space: nowrap;
-      }
-
-      .btn-nav-primary:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 16px rgba(102, 126, 234, 0.45);
-        color: white;
-      }
-
-      .btn-user {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.4rem 0.85rem;
-        background: rgba(102, 126, 234, 0.08);
-        border: 1.5px solid rgba(102, 126, 234, 0.2);
-        border-radius: 50px;
-        color: #667eea;
-        font-weight: 600;
-        font-size: 0.875rem;
-        cursor: pointer;
-        transition: all 0.2s;
-      }
-
-      .btn-user:hover {
-        background: rgba(102, 126, 234, 0.15);
-        border-color: #667eea;
-      }
-
-      .user-avatar {
-        width: 26px;
-        height: 26px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 0.75rem;
-        font-weight: 700;
-      }
-
-      .user-name {
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .dropdown-header-info {
-        padding: 0.5rem 0.85rem;
-      }
-
-      .navbar-toggler-custom {
-        display: none;
-        flex-direction: column;
-        gap: 5px;
-        padding: 6px 8px;
-        background: transparent;
-        border: none;
-        cursor: pointer;
-        margin-left: auto;
-      }
-
-      .navbar-toggler-custom span {
-        display: block;
-        width: 22px;
-        height: 2px;
-        background: #667eea;
-        border-radius: 2px;
-        transition: all 0.2s;
-      }
-
-      .app-main {
-        flex: 1;
-        min-height: 0;
-      }
-
-      .app-footer {
-        background: #1a1a2e;
-        color: rgba(255,255,255,0.7);
-        padding: 2rem 0;
-        margin-top: auto;
-      }
-
-      .footer-content {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        flex-wrap: wrap;
-      }
-
-      .footer-brand {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-      }
-
-      .footer-brand .brand-icon {
-        width: 28px;
-        height: 28px;
-        font-size: 0.9rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 7px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-
-      .footer-brand .brand-text {
-        font-weight: 700;
-        font-size: 1rem;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-      }
-
-      .footer-text {
-        margin: 0;
-        font-size: 0.85rem;
-        color: rgba(255,255,255,0.5);
-      }
-
-      .footer-links a {
-        color: rgba(255,255,255,0.5);
-        text-decoration: none;
-        font-size: 0.85rem;
-        transition: color 0.2s;
-      }
-
-      .footer-links a:hover { color: #667eea; }
-
-      @media (max-width: 991.98px) {
-        .navbar-toggler-custom { display: flex; }
-
-        .navbar-collapse {
-          position: absolute;
-          top: 100%;
-          left: 0;
-          right: 0;
-          background: rgba(255, 255, 255, 0.98);
-          backdrop-filter: blur(20px);
-          border-bottom: 1px solid rgba(102, 126, 234, 0.12);
-          padding: 1rem 1.5rem;
-          box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-        }
-
-        .nav-links {
-          flex-direction: column;
-          align-items: stretch;
-          gap: 0.25rem;
-          margin-bottom: 1rem;
-        }
-
-        .nav-item-link { width: 100%; }
-
-        .nav-actions {
-          border-top: 1px solid rgba(102, 126, 234, 0.1);
-          padding-top: 0.75rem;
-        }
-      }
-    `
-  ]
+    .offcanvas-header { border-bottom: 1px solid var(--border); }
+    .offcanvas { width: 280px; }
+  `]
 })
 export class AppComponent implements OnInit, OnDestroy {
   currentUser: User | null = null;
@@ -417,9 +208,28 @@ export class AppComponent implements OnInit, OnDestroy {
   isAdmin = false;
   private destroy$ = new Subject<void>();
 
+  readonly mainNav = [
+    { link: '/quiz/browse', icon: 'bi-compass', label: 'Khám phá', auth: false },
+    { link: '/dashboard/my-quizzes', icon: 'bi-collection', label: 'Quiz của tôi', auth: true },
+    { link: '/dashboard/history', icon: 'bi-clock-history', label: 'Bài đã làm', auth: true },
+    { link: '/dashboard/question-banks', icon: 'bi-archive', label: 'Ngân hàng câu hỏi', auth: true }
+  ];
+
+  readonly adminNav = [
+    { link: '/admin/users', icon: 'bi-people', label: 'Người dùng' },
+    { link: '/admin/quizzes', icon: 'bi-shield-check', label: 'Kiểm duyệt quiz' }
+  ];
+
+  readonly themeOptions: { value: ThemePreference; label: string; icon: string }[] = [
+    { value: 'light', label: 'Sáng', icon: 'bi-sun' },
+    { value: 'dark', label: 'Tối', icon: 'bi-moon-stars' },
+    { value: 'system', label: 'Tự động', icon: 'bi-circle-half' }
+  ];
+
   constructor(
     private authService: AuthService,
-    private router: Router
+    private router: Router,
+    public theme: ThemeService
   ) {}
 
   ngOnInit(): void {
@@ -430,6 +240,29 @@ export class AppComponent implements OnInit, OnDestroy {
         this.isLoggedIn = !!user;
         this.isAdmin = user?.role === 'Administrator';
       });
+
+    // Route change: scroll the content container to top and move focus to <main>
+    // (skipped on the first load and on query-param-only changes).
+    let lastPath: string | null = null;
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntil(this.destroy$)
+      )
+      .subscribe((e) => {
+        const path = e.urlAfterRedirects.split(/[?#]/)[0];
+        const isFirst = lastPath === null;
+        const changed = path !== lastPath;
+        lastPath = path;
+        if (isFirst || !changed) return;
+
+        document.querySelector('.app-content-wrapper')?.scrollTo({ top: 0 });
+        document.getElementById('main-content')?.focus({ preventScroll: true });
+      });
+  }
+
+  setTheme(pref: ThemePreference): void {
+    this.theme.setPreference(pref);
   }
 
   logout(): void {

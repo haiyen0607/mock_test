@@ -14,6 +14,7 @@ public class RegisterRequest
 
     [Required(ErrorMessage = "Email is required.")]
     [EmailAddress]
+    [StringLength(255)]
     public string Email { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Password is required.")]
@@ -25,9 +26,11 @@ public class RegisterRequest
 public class LoginRequest
 {
     [Required(ErrorMessage = "Username or email is required.")]
+    [StringLength(255)]
     public string UsernameOrEmail { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Password is required.")]
+    [StringLength(100)]
     public string Password { get; set; } = string.Empty;
 }
 

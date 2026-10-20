@@ -13,6 +13,9 @@ public static class PasswordHasher
     private const int HashSize = 32;
     private const int Iterations = 100_000;
 
+    /// <summary>Hash giả, dùng để "verify" khi username không tồn tại (xem <see cref="VerifyDummy"/>).</summary>
+    private static readonly Lazy<string> DummyHash = new(() => Hash(Guid.NewGuid().ToString()));
+
     public static string Hash(string password)
     {
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
@@ -31,5 +34,15 @@ public static class PasswordHasher
 
         var actual = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, expected.Length);
         return CryptographicOperations.FixedTimeEquals(actual, expected);
+    }
+
+    /// <summary>
+    /// UC02 – chống dò tài khoản qua thời gian phản hồi (timing attack): khi không tìm thấy user vẫn chạy
+    /// PBKDF2 với cùng số vòng lặp, để "sai username" và "sai mật khẩu" tốn thời gian như nhau. Luôn trả false.
+    /// </summary>
+    public static bool VerifyDummy(string password)
+    {
+        Verify(password, DummyHash.Value);
+        return false;
     }
 }

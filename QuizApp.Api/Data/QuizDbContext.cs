@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using QuizApp.Api.Entities;
 
 namespace QuizApp.Api.Data;
@@ -15,6 +16,26 @@ public class QuizDbContext : DbContext
     public DbSet<QuizQuestion> QuizQuestions => Set<QuizQuestion>();
     public DbSet<QuizAttempt> QuizAttempts => Set<QuizAttempt>();
     public DbSet<AttemptAnswer> AttemptAnswers => Set<AttemptAnswer>();
+
+    /// <summary>
+    /// Mọi cột DateTime lưu giờ UTC. SQL Server không lưu Kind nên khi đọc ra DateTime có Kind = Unspecified
+    /// và bị serialize thiếu "Z" -> trình duyệt hiểu nhầm là giờ địa phương (timer làm bài lệch).
+    /// Converter này gắn lại Kind = Utc khi đọc.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        configurationBuilder.Properties<DateTime?>().HaveConversion<UtcDateTimeConverter>();
+    }
+
+    private sealed class UtcDateTimeConverter : ValueConverter<DateTime, DateTime>
+    {
+        public UtcDateTimeConverter()
+            : base(v => v.Kind == DateTimeKind.Local ? v.ToUniversalTime() : v,
+                   v => DateTime.SpecifyKind(v, DateTimeKind.Utc))
+        {
+        }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -45,6 +66,7 @@ public class QuizDbContext : DbContext
             entity.Property(e => e.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
             entity.Property(e => e.Description).HasColumnName("description");
             entity.Property(e => e.IsPublic).HasColumnName("is_public").IsRequired();
+            entity.Property(e => e.IsDeleted).HasColumnName("is_deleted").IsRequired();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
 
             entity.HasOne(e => e.Owner)
@@ -63,6 +85,9 @@ public class QuizDbContext : DbContext
             entity.Property(e => e.QuestionType).HasColumnName("question_type").HasConversion<string>().HasMaxLength(50).IsRequired();
             entity.Property(e => e.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
+
+            // Lọc theo trạng thái kiểm duyệt ở hầu hết truy vấn công khai (A4)
+            entity.HasIndex(e => e.Status);
 
             entity.HasOne(e => e.QuestionBank)
                   .WithMany(b => b.Questions)
@@ -97,6 +122,9 @@ public class QuizDbContext : DbContext
             entity.Property(e => e.IsPublished).HasColumnName("is_published").IsRequired();
             entity.Property(e => e.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20).IsRequired();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at").IsRequired();
+
+            // UC04/UC05 – danh sách Quiz công khai lọc IsPublished + Status và sắp theo CreatedAt (A4)
+            entity.HasIndex(e => new { e.IsPublished, e.Status, e.CreatedAt });
 
             entity.HasOne(e => e.Owner)
                   .WithMany(u => u.Quizzes)
@@ -135,6 +163,15 @@ public class QuizDbContext : DbContext
             entity.Property(e => e.StartedAt).HasColumnName("started_at").IsRequired();
             entity.Property(e => e.SubmittedAt).HasColumnName("submitted_at");
             entity.Property(e => e.Score).HasColumnName("score");
+            entity.Property(e => e.DurationMinutes).HasColumnName("duration_minutes").IsRequired();
+            entity.Property(e => e.CorrectCount).HasColumnName("correct_count").IsRequired();
+            entity.Property(e => e.MaxScore).HasColumnName("max_score").IsRequired();
+            entity.Property(e => e.PendingCount).HasColumnName("pending_count").IsRequired();
+            entity.Property(e => e.RowVersion).HasColumnName("row_version").IsRowVersion();
+
+            // Lịch sử làm bài của User (A5) và đếm lượt trial của Guest (UC07 A1)
+            entity.HasIndex(e => new { e.UserId, e.SubmittedAt });
+            entity.HasIndex(e => new { e.IsTrial, e.GuestIdentifier });
 
             entity.HasOne(e => e.Quiz)
                   .WithMany(q => q.Attempts)
@@ -156,6 +193,7 @@ public class QuizDbContext : DbContext
             entity.Property(e => e.QuestionId).HasColumnName("question_id").IsRequired();
             entity.Property(e => e.AnswerId).HasColumnName("answer_id");
             entity.Property(e => e.ResponseText).HasColumnName("response_text");
+            entity.Property(e => e.IsCorrect).HasColumnName("is_correct");
 
             entity.HasOne(e => e.Attempt)
                   .WithMany(a => a.Answers)

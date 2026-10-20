@@ -7,10 +7,13 @@ namespace QuizApp.Api.Data;
 /// <summary>
 /// Tạo dữ liệu mẫu: 1 Administrator, 1 User, 1 Question Bank công khai với vài
 /// câu hỏi, và 1 Quiz đã publish — để có thể gọi thử API ngay sau khi khởi động.
+/// CHỈ chạy ở môi trường Development (Program.cs). Mật khẩu lấy từ cấu hình
+/// Seed:AdminPassword / Seed:UserPassword (appsettings.Development.json hoặc user-secrets),
+/// không còn hardcode trong mã nguồn.
 /// </summary>
 public static class DbSeeder
 {
-    public static void Seed(QuizDbContext db)
+    public static void Seed(QuizDbContext db, string adminPassword, string userPassword)
     {
         if (db.Users.Any()) return;
 
@@ -18,7 +21,7 @@ public static class DbSeeder
         {
             Username = "admin",
             Email = "admin@quizapp.local",
-            PasswordHash = PasswordHasher.Hash("Admin@123"),
+            PasswordHash = PasswordHasher.Hash(adminPassword),
             Role = UserRole.Administrator,
             Status = AccountStatus.Active,
             CreatedAt = DateTime.UtcNow
@@ -28,7 +31,7 @@ public static class DbSeeder
         {
             Username = "hoanganh",
             Email = "hoanganh@quizapp.local",
-            PasswordHash = PasswordHasher.Hash("User@123"),
+            PasswordHash = PasswordHasher.Hash(userPassword),
             Role = UserRole.User,
             Status = AccountStatus.Active,
             CreatedAt = DateTime.UtcNow

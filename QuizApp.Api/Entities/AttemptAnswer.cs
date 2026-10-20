@@ -13,6 +13,13 @@ public class AttemptAnswer
     /// <summary>Dùng cho câu hỏi dạng văn bản (FillInTheBlanks/ShortAnswer/LongAnswer).</summary>
     public string? ResponseText { get; set; }
 
+    /// <summary>
+    /// Kết quả đúng/sai của CÂU HỎI này, chốt tại thời điểm Submit (UC09).
+    /// null = câu dạng văn bản đang chờ chấm thủ công (UC09 A3).
+    /// Lưu lại để UC10 hiển thị đúng kết quả lúc nộp, kể cả khi sau đó đáp án/câu hỏi bị sửa.
+    /// </summary>
+    public bool? IsCorrect { get; set; }
+
     public QuizAttempt? Attempt { get; set; }
     public Question? Question { get; set; }
     public Answer? Answer { get; set; }

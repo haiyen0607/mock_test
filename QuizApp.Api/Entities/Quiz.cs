@@ -31,3 +31,16 @@ public class Quiz
 
     public ICollection<QuizAttempt> Attempts { get; set; } = new List<QuizAttempt>();
 }
+
+public static class QuizExtensions
+{
+    /// <summary>
+    /// Các câu hỏi của Quiz mà người làm bài được thấy: chưa bị Admin gỡ (UC20 A2), theo đúng thứ tự.
+    /// Yêu cầu đã Include(QuizQuestions).ThenInclude(Question).
+    /// </summary>
+    public static List<QuizQuestion> ActiveQuestions(this Quiz quiz) =>
+        quiz.QuizQuestions
+            .Where(qq => qq.Question is not null && qq.Question.Status == ContentStatus.Active)
+            .OrderBy(qq => qq.OrderIndex)
+            .ToList();
+}

@@ -1,0 +1,16 @@
+# User / Tool data
+.codegraph/
+.vs/
+*.user
+*.suo
+
+# Build artifacts
+**/bin/
+**/obj/
+quizapp-frontend/dist/
+quizapp-frontend/.angular/
+quizapp-frontend/node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db

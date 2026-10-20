@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -8,6 +8,7 @@
     <!-- Emit XML docs so the /// <summary> UC comments appear in Scalar; 1591 = "missing XML comment" noise -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <UserSecretsId>04cb85d9-fa0e-448a-883d-e238021b9990</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

@@ -1,158 +1,150 @@
 // BƯỚC 2 — UC11: Create Quiz (form tạo quiz mới)
 
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { QuizService } from '../../core/services/quiz.service';
-import { ProblemDetails } from '../../core/models';
+import { extractError } from '../../core/errors';
+import { DialogService } from '../../core/services/dialog.service';
 
 @Component({
   selector: 'app-quiz-create',
   standalone: true,
   imports: [CommonModule, ReactiveFormsModule, RouterModule],
   template: `
-    <div class="page-bg min-vh-100 py-5">
-      <div class="container">
-        <div class="row justify-content-center">
-          <div class="col-lg-7">
-            <!-- Back -->
-            <a routerLink="/dashboard/my-quizzes" class="btn btn-back mb-4">
-              ← Quay lại Quiz Của Tôi
-            </a>
+    <div class="page-container-narrow animate-fade-up">
+      <a routerLink="/dashboard/my-quizzes" class="back-link">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i>Quiz của tôi
+      </a>
 
-            <div class="form-card">
-              <div class="form-card-accent"></div>
-              <div class="form-card-body p-4 p-md-5">
-                <h2 class="mb-4 text-secondary fw-bold">✨ Tạo Quiz Mới</h2>
+      <header class="page-header">
+        <div>
+          <h1>Tạo quiz mới</h1>
+          <p class="page-subtitle">Điền thông tin cơ bản, sau đó bạn sẽ được chuyển tới trang thêm câu hỏi.</p>
+        </div>
+      </header>
 
-                <!-- Error -->
-                <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show rounded-3 border-0">
-                  {{ errorMessage }}
-                  <button type="button" class="btn-close" (click)="errorMessage = null"></button>
-                </div>
+      <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+        <div>{{ errorMessage }}</div>
+        <button type="button" class="btn-close" aria-label="Đóng" (click)="errorMessage = null"></button>
+      </div>
 
-                <form [formGroup]="quizForm" (ngSubmit)="onSubmit()">
-                  <div class="mb-4">
-                    <label for="title" class="form-label">Tiêu đề <span class="text-danger">*</span></label>
-                    <input
-                      type="text"
-                      id="title"
-                      class="form-control"
-                      formControlName="title"
-                      placeholder="VD: Kiểm tra kiến thức cơ bản"
-                      [class.is-invalid]="isFieldInvalid('title')"
-                    />
-                    <div *ngIf="isFieldInvalid('title')" class="invalid-feedback d-block">
-                      <span *ngIf="quizForm.get('title')?.errors?.['required']">Tiêu đề là bắt buộc</span>
-                      <span *ngIf="quizForm.get('title')?.errors?.['maxlength']">Tiêu đề tối đa 255 ký tự</span>
-                    </div>
-                  </div>
+      <form [formGroup]="quizForm" (ngSubmit)="onSubmit()" novalidate>
+        <section class="surface form-section">
+          <h2 class="section-title">Thông tin chung</h2>
 
-                  <div class="mb-4">
-                    <label for="description" class="form-label">Mô tả</label>
-                    <textarea
-                      id="description"
-                      class="form-control"
-                      rows="4"
-                      formControlName="description"
-                      placeholder="Quiz này kiểm tra những gì? (không bắt buộc)"
-                      [class.is-invalid]="isFieldInvalid('description')"
-                    ></textarea>
-                    <div *ngIf="isFieldInvalid('description')" class="invalid-feedback d-block">
-                      Mô tả tối đa 2000 ký tự
-                    </div>
-                  </div>
-
-                  <div class="mb-5">
-                    <label for="duration" class="form-label">Thời gian làm bài (phút) <span class="text-danger">*</span></label>
-                    <input
-                      type="number"
-                      id="duration"
-                      class="form-control"
-                      style="max-width: 180px;"
-                      formControlName="duration"
-                      min="1"
-                      max="600"
-                      [class.is-invalid]="isFieldInvalid('duration')"
-                    />
-                    <div *ngIf="isFieldInvalid('duration')" class="invalid-feedback d-block">
-                      <span *ngIf="quizForm.get('duration')?.errors?.['required']">Thời gian là bắt buộc</span>
-                      <span *ngIf="quizForm.get('duration')?.errors?.['min'] || quizForm.get('duration')?.errors?.['max']">
-                        Thời gian phải từ 1 đến 600 phút
-                      </span>
-                    </div>
-                  </div>
-
-                  <!-- Buttons -->
-                  <div class="d-flex gap-3 align-items-center mb-4">
-                    <button
-                      type="submit"
-                      class="btn btn-gradient px-4"
-                      [disabled]="isSubmitting || quizForm.invalid"
-                    >
-                      <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status"></span>
-                      {{ isSubmitting ? 'Đang lưu...' : 'Lưu Quiz' }}
-                    </button>
-                    <a routerLink="/dashboard/my-quizzes" class="btn btn-outline-secondary rounded-3 px-4">Hủy</a>
-                  </div>
-
-                  <div class="info-note p-3 rounded-3 d-flex gap-2 align-items-start">
-                    <span>ℹ️</span>
-                    <small class="text-muted">Quiz mới tạo ở trạng thái <strong>Riêng tư</strong>. Thêm câu hỏi xong mới publish được.</small>
-                  </div>
-                </form>
-              </div>
+          <div class="mb-3">
+            <label for="title" class="form-label">Tiêu đề <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(bắt buộc)</span></label>
+            <input
+              type="text"
+              id="title"
+              class="form-control"
+              formControlName="title"
+              [attr.aria-describedby]="isFieldInvalid('title') ? 'titleError titleHelp' : 'titleHelp'"
+              [attr.aria-invalid]="isFieldInvalid('title') ? true : null"
+              [class.is-invalid]="isFieldInvalid('title')"
+            />
+            <div id="titleHelp" class="form-text">Ví dụ: Kiểm tra kiến thức cơ bản. Tối đa 255 ký tự.</div>
+            <div *ngIf="isFieldInvalid('title')" id="titleError" class="invalid-feedback d-block">
+              <span *ngIf="quizForm.get('title')?.errors?.['required']">Tiêu đề là bắt buộc</span>
+              <span *ngIf="quizForm.get('title')?.errors?.['maxlength']">Tiêu đề tối đa 255 ký tự</span>
             </div>
           </div>
+
+          <div>
+            <label for="description" class="form-label">Mô tả</label>
+            <textarea
+              id="description"
+              class="form-control"
+              rows="4"
+              formControlName="description"
+              [attr.aria-describedby]="isFieldInvalid('description') ? 'descriptionError descriptionHelp' : 'descriptionHelp'"
+              [attr.aria-invalid]="isFieldInvalid('description') ? true : null"
+              [class.is-invalid]="isFieldInvalid('description')"
+            ></textarea>
+            <div id="descriptionHelp" class="form-text">Quiz này kiểm tra những gì. Không bắt buộc.</div>
+            <div *ngIf="isFieldInvalid('description')" id="descriptionError" class="invalid-feedback d-block">
+              Mô tả tối đa 2000 ký tự
+            </div>
+          </div>
+        </section>
+
+        <section class="surface form-section">
+          <h2 class="section-title">Cài đặt</h2>
+
+          <div class="mb-3">
+            <label for="duration" class="form-label">Thời gian làm bài <span class="req" aria-hidden="true">*</span><span class="visually-hidden">(bắt buộc)</span></label>
+            <div class="input-group duration-group">
+              <input
+                type="number"
+                id="duration"
+                class="form-control"
+                formControlName="duration"
+                min="1"
+                max="600"
+                [attr.aria-describedby]="isFieldInvalid('duration') ? 'durationError durationHelp' : 'durationHelp'"
+                [attr.aria-invalid]="isFieldInvalid('duration') ? true : null"
+                [class.is-invalid]="isFieldInvalid('duration')"
+              />
+              <span class="input-group-text">phút</span>
+            </div>
+            <div id="durationHelp" class="form-text">Từ 1 đến 600 phút.</div>
+            <div *ngIf="isFieldInvalid('duration')" id="durationError" class="invalid-feedback d-block">
+              <span *ngIf="quizForm.get('duration')?.errors?.['required']">Thời gian là bắt buộc</span>
+              <span *ngIf="quizForm.get('duration')?.errors?.['min'] || quizForm.get('duration')?.errors?.['max']">
+                Thời gian phải từ 1 đến 600 phút
+              </span>
+            </div>
+          </div>
+
+          <div class="visibility-note">
+            <i class="bi bi-lock" aria-hidden="true"></i>
+            <div>
+              Quiz mới tạo ở trạng thái <strong>Riêng tư</strong>. Thêm câu hỏi xong mới công khai được.
+            </div>
+          </div>
+        </section>
+
+        <div class="form-actions">
+          <a routerLink="/dashboard/my-quizzes" class="btn btn-light">Hủy</a>
+          <button type="submit" class="btn btn-primary" [disabled]="isSubmitting || quizForm.invalid">
+            <span *ngIf="isSubmitting" class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+            {{ isSubmitting ? 'Đang lưu…' : 'Lưu quiz' }}
+          </button>
         </div>
-      </div>
+      </form>
     </div>
   `,
   styles: [`
-    .page-bg { background-color: #f8f9ff; }
+    .form-section { padding: 1.5rem; margin-bottom: 1rem; box-shadow: var(--shadow-sm); }
+    .req { color: var(--danger); }
+    .duration-group { max-width: 220px; }
+    .duration-group .form-control { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .duration-group .input-group-text { border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: 0; }
 
-    .btn-back {
-      background: white;
-      border: 1.5px solid #e8eaf6;
-      border-radius: 50px;
-      color: #6b7280;
-      font-weight: 500;
-      text-decoration: none;
-      padding: 0.45rem 1rem;
-      transition: all 0.2s;
+    .visibility-note {
+      display: flex; gap: 0.6rem; align-items: flex-start;
+      padding: 0.75rem 0.9rem;
+      border-radius: var(--radius-input);
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: 0.85rem;
     }
-    .btn-back:hover { border-color: #667eea; color: #667eea; }
+    .visibility-note strong { color: var(--text); }
 
-    .form-card {
-      background: white;
-      border-radius: 14px;
-      border: 1px solid #e8eaf6;
-      box-shadow: 0 2px 12px rgba(102,126,234,0.07);
-      overflow: hidden;
-      position: relative;
+    .form-actions {
+      display: flex; justify-content: flex-end; gap: 0.5rem; flex-wrap: wrap;
+      margin-top: 1.25rem;
     }
-    .form-card-accent {
-      height: 5px;
-      background: linear-gradient(135deg, #667eea, #764ba2);
+    @media (max-width: 575.98px) {
+      .form-section { padding: 1.15rem; }
     }
-
-    .btn-gradient {
-      background: linear-gradient(135deg, #667eea, #764ba2);
-      color: white;
-      border: none;
-      border-radius: 8px;
-      font-weight: 600;
-      padding: 0.65rem 1.5rem;
-      transition: all 0.2s;
-    }
-    .btn-gradient:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); color: white; }
-    .btn-gradient:disabled { opacity: 0.65; }
-
-    .info-note { background: #f0f4ff; border: 1px solid #e0e7ff; }
   `]
 })
 export class QuizCreateComponent {
+  private dialog = inject(DialogService);
   quizForm: FormGroup;
   isSubmitting = false;
   errorMessage: string | null = null;
@@ -193,27 +185,15 @@ export class QuizCreateComponent {
         duration: Number(duration)
       })
       .subscribe({
-        next: () => {
-          // Tạo xong → quay về danh sách, quiz mới sẽ nằm đầu bảng
-          this.router.navigate(['/dashboard/my-quizzes']);
+        next: (createdQuiz) => {
+          this.dialog.toast('Đã tạo quiz. Hãy thêm câu hỏi.');
+          this.router.navigate(['/dashboard/quiz-questions', createdQuiz.quizId]);
         },
         error: (err) => {
           this.isSubmitting = false;
-          this.errorMessage = this.extractError(err);
+          this.errorMessage = extractError(err, 'Tạo quiz thất bại. Vui lòng thử lại.');
           console.error(err);
         }
       });
-  }
-
-  // Backend có 2 dạng lỗi:
-  //   - ProblemDetails thường:   { detail: "..." }
-  //   - ValidationProblem (400): { errors: { title: ["..."], duration: ["..."] } }
-  private extractError(err: any): string {
-    const data: ProblemDetails | undefined = err?.response?.data;
-    if (data?.errors) {
-      // Gom tất cả message validation thành 1 chuỗi
-      return Object.values(data.errors).flat().join(' ');
-    }
-    return data?.detail || 'Tạo quiz thất bại. Vui lòng thử lại.';
   }
 }

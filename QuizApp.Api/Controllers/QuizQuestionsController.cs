@@ -32,57 +32,75 @@ public class QuizQuestionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<QuestionSummaryDto>> AddQuestion(int quizId, [FromBody] AddQuizQuestionRequest request)
     {
-        var quiz = await _db.Quizzes.Include(q => q.QuizQuestions).FirstOrDefaultAsync(q => q.QuizId == quizId);
+        var quiz = await _db.Quizzes.Include(q => q.QuizQuestions)
+            .FirstOrDefaultAsync(q => q.QuizId == quizId && q.Status != ContentStatus.Deleted);
         if (quiz is null)
-            return Problem(detail: $"Quiz {quizId} was not found.", statusCode: StatusCodes.Status404NotFound);
+            return this.ApiProblem(StatusCodes.Status404NotFound, ErrorCodes.QuizNotFound, $"Quiz {quizId} was not found.");
 
         // A4 – User does not own the Quiz
-        if (quiz.OwnerId != User.GetUserId() && !User.IsAdministrator())
-            return Problem(detail: "You do not own this quiz.", statusCode: StatusCodes.Status403Forbidden);
+        if (!User.CanManage(quiz.OwnerId))
+            return this.ApiProblem(StatusCodes.Status403Forbidden, ErrorCodes.NotOwner, "You do not own this quiz.");
+
+        // Chỉ được chọn 1 trong 2 cách: reuse (questionId) HOẶC tạo mới (newQuestion, questionBankId tuỳ chọn)
+        var wantsReuse = request.QuestionId is not null;
+        var wantsCreate = request.NewQuestion is not null || request.QuestionBankId is not null;
+        if (wantsReuse && wantsCreate)
+            return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, "Provide either questionId (reuse) or newQuestion (create), not both.");
 
         Question question;
 
-        if (request.QuestionId is not null)
+        if (request.QuestionId is int reuseId)
         {
             // UC17 – Reuse Question
             var existing = await _db.Questions.Include(q => q.QuestionBank).Include(q => q.Answers)
-                .FirstOrDefaultAsync(q => q.QuestionId == request.QuestionId.Value);
+                .FirstOrDefaultAsync(q => q.QuestionId == reuseId);
 
             if (existing is null || existing.Status != ContentStatus.Active)
-                return Problem(detail: "No matching Question is found.", statusCode: StatusCodes.Status404NotFound); // A1
+                return this.ApiProblem(StatusCodes.Status404NotFound, ErrorCodes.QuestionNotFound, "No matching Question is found."); // A1
 
             // A2 – Question is not accessible (private bank owned by another User)
-            var accessible = existing.QuestionBank!.IsPublic || existing.QuestionBank.OwnerId == User.GetUserId() || User.IsAdministrator();
+            var accessible = existing.QuestionBank!.IsPublic || User.CanManage(existing.QuestionBank.OwnerId);
             if (!accessible)
-                return Problem(detail: "This question belongs to a private Question Bank.", statusCode: StatusCodes.Status403Forbidden);
+                return this.ApiProblem(StatusCodes.Status403Forbidden, ErrorCodes.Forbidden, "This question belongs to a private Question Bank.");
 
             // A3 – Question already exists in the Quiz
             if (quiz.QuizQuestions.Any(qq => qq.QuestionId == existing.QuestionId))
-                return Problem(detail: "This question is already part of the quiz.", statusCode: StatusCodes.Status400BadRequest);
+                return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, "This question is already part of the quiz.");
 
             question = existing;
         }
-        else if (request.NewQuestion is not null && request.QuestionBankId is not null)
+        else if (request.NewQuestion is not null)
         {
-            var bank = await _db.QuestionBanks.FirstOrDefaultAsync(b => b.QuestionBankId == request.QuestionBankId.Value);
-            if (bank is null)
-                return Problem(detail: $"Question Bank {request.QuestionBankId} was not found.", statusCode: StatusCodes.Status404NotFound);
+            QuestionBank bank;
+            if (request.QuestionBankId is int bankId)
+            {
+                var chosen = await _db.QuestionBanks.FirstOrDefaultAsync(b => b.QuestionBankId == bankId);
+                if (chosen is null || chosen.IsDeleted)
+                    return this.ApiProblem(StatusCodes.Status404NotFound, ErrorCodes.BankNotFound, $"Question Bank {bankId} was not found.");
 
-            if (bank.OwnerId != User.GetUserId() && !User.IsAdministrator())
-                return Problem(detail: "You do not own this Question Bank.", statusCode: StatusCodes.Status403Forbidden);
+                if (!User.CanManage(chosen.OwnerId))
+                    return this.ApiProblem(StatusCodes.Status403Forbidden, ErrorCodes.NotOwner, "You do not own this Question Bank.");
+
+                bank = chosen;
+            }
+            else
+            {
+                // Không chọn bank -> lưu vào bank mặc định (riêng tư) của CHỦ QUIZ (Question bắt buộc thuộc 1 bank).
+                bank = await GetOrCreateDefaultBankAsync(quiz.OwnerId);
+            }
 
             if (string.IsNullOrWhiteSpace(request.NewQuestion.Content))
-                return Problem(detail: "Content is required for a new question.", statusCode: StatusCodes.Status400BadRequest);
+                return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, "Content is required for a new question.");
 
             // A1 – dùng chung quy tắc với UC15: loại câu hỏi văn bản không được có Answer,
             // SingleChoice/TrueFalse tối đa 1 đáp án đúng.
             var ruleError = QuestionBanksController.ValidateAnswers(request.NewQuestion.QuestionType!.Value, request.NewQuestion.Answers);
             if (ruleError is not null)
-                return Problem(detail: ruleError, statusCode: StatusCodes.Status400BadRequest);
+                return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, ruleError);
 
             question = new Question
             {
-                QuestionBankId = bank.QuestionBankId,
+                QuestionBank = bank, // bank mặc định có thể chưa có Id -> gán navigation, EF lưu cả hai
                 Content = request.NewQuestion.Content.Trim(),
                 QuestionType = request.NewQuestion.QuestionType.Value,
                 Status = ContentStatus.Active,
@@ -94,7 +112,17 @@ public class QuizQuestionsController : ControllerBase
         }
         else
         {
-            return Problem(detail: "Provide either questionId (reuse) or questionBankId + newQuestion (create).", statusCode: StatusCodes.Status400BadRequest);
+            return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, "Provide either questionId (reuse) or newQuestion (create).");
+        }
+
+        // Quiz đang Public thì câu mới thêm vào phải đủ nội dung ngay (cùng điều kiện với UC14 Publish),
+        // nếu không người làm bài sẽ gặp câu không thể trả lời đúng.
+        if (quiz.IsPublished)
+        {
+            var reason = QuestionTypeRules.ValidateForPlay(question.QuestionType,
+                question.Answers.Count, question.Answers.Count(a => a.IsCorrect));
+            if (reason is not null)
+                return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, $"This quiz is published, so the question must be complete: {reason}");
         }
 
         var nextOrder = quiz.QuizQuestions.Count == 0 ? 1 : quiz.QuizQuestions.Max(qq => qq.OrderIndex) + 1;
@@ -115,8 +143,36 @@ public class QuizQuestionsController : ControllerBase
         await _db.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        var summary = new QuestionSummaryDto(question.QuestionId, link.OrderIndex, question.Content, question.QuestionType.ToString(), question.Answers?.Count ?? 0);
+        var summary = new QuestionSummaryDto(question.QuestionId, link.OrderIndex, question.Content, question.QuestionType.ToString(),
+            question.Answers.Count, question.Status.ToString());
         return StatusCode(StatusCodes.Status201Created, summary);
+    }
+
+    /// <summary>Tên bank mặc định chứa câu hỏi tạo trực tiếp trong Quiz mà không chọn bank.</summary>
+    internal const string DefaultBankName = "Câu hỏi tạo trong quiz";
+
+    /// <summary>
+    /// Bank mặc định (riêng tư) của <paramref name="ownerId"/>: tìm theo tên, chưa có thì tạo.
+    /// Được thêm vào DbContext nhưng chưa SaveChanges — lưu cùng Question trong AddQuestion.
+    /// </summary>
+    private async Task<QuestionBank> GetOrCreateDefaultBankAsync(int ownerId)
+    {
+        var existing = await _db.QuestionBanks
+            .Where(b => b.OwnerId == ownerId && !b.IsDeleted && b.Name == DefaultBankName)
+            .OrderBy(b => b.QuestionBankId)
+            .FirstOrDefaultAsync();
+        if (existing is not null) return existing;
+
+        var bank = new QuestionBank
+        {
+            OwnerId = ownerId,
+            Name = DefaultBankName,
+            Description = "Tự động tạo để lưu các câu hỏi được thêm thẳng vào quiz mà không chọn ngân hàng.",
+            IsPublic = false,
+            CreatedAt = DateTime.UtcNow
+        };
+        _db.QuestionBanks.Add(bank);
+        return bank;
     }
 
     /// <summary>UC13 – sắp xếp lại thứ tự câu hỏi trong Quiz.</summary>
@@ -128,18 +184,22 @@ public class QuizQuestionsController : ControllerBase
     public async Task<ActionResult<List<QuestionSummaryDto>>> Reorder(int quizId, [FromBody] ReorderQuizQuestionsRequest request)
     {
         var quiz = await _db.Quizzes
-            .Include(q => q.QuizQuestions).ThenInclude(qq => qq.Question)
-            .FirstOrDefaultAsync(q => q.QuizId == quizId);
+            .Include(q => q.QuizQuestions).ThenInclude(qq => qq.Question).ThenInclude(q => q!.Answers)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(q => q.QuizId == quizId && q.Status != ContentStatus.Deleted);
 
         if (quiz is null)
-            return Problem(detail: $"Quiz {quizId} was not found.", statusCode: StatusCodes.Status404NotFound);
+            return this.ApiProblem(StatusCodes.Status404NotFound, ErrorCodes.QuizNotFound, $"Quiz {quizId} was not found.");
 
-        if (quiz.OwnerId != User.GetUserId() && !User.IsAdministrator())
-            return Problem(detail: "You do not own this quiz.", statusCode: StatusCodes.Status403Forbidden);
+        if (!User.CanManage(quiz.OwnerId))
+            return this.ApiProblem(StatusCodes.Status403Forbidden, ErrorCodes.NotOwner, "You do not own this quiz.");
 
         var currentIds = quiz.QuizQuestions.Select(qq => qq.QuestionId).ToHashSet();
-        if (!request.QuestionIds.ToHashSet().SetEquals(currentIds))
-            return Problem(detail: "The submitted list must contain exactly the quiz's current questions.", statusCode: StatusCodes.Status400BadRequest);
+        // Phải đủ số lượng VÀ không trùng: SetEquals bỏ qua phần tử trùng nên [1,1,2] vẫn "bằng" {1,2}
+        if (request.QuestionIds.Count != currentIds.Count
+            || request.QuestionIds.Distinct().Count() != request.QuestionIds.Count
+            || !request.QuestionIds.ToHashSet().SetEquals(currentIds))
+            return this.ApiProblem(StatusCodes.Status400BadRequest, ErrorCodes.InvalidRequest, "The submitted list must contain exactly the quiz's current questions.");
 
         for (var i = 0; i < request.QuestionIds.Count; i++)
         {
@@ -158,16 +218,16 @@ public class QuizQuestionsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RemoveQuestion(int quizId, int questionId)
     {
-        var quiz = await _db.Quizzes.FirstOrDefaultAsync(q => q.QuizId == quizId);
+        var quiz = await _db.Quizzes.FirstOrDefaultAsync(q => q.QuizId == quizId && q.Status != ContentStatus.Deleted);
         if (quiz is null)
-            return Problem(detail: $"Quiz {quizId} was not found.", statusCode: StatusCodes.Status404NotFound);
+            return this.ApiProblem(StatusCodes.Status404NotFound, ErrorCodes.QuizNotFound, $"Quiz {quizId} was not found.");
 
-        if (quiz.OwnerId != User.GetUserId() && !User.IsAdministrator())
-            return Problem(detail: "You do not own this quiz.", statusCode: StatusCodes.Status403Forbidden);
+        if (!User.CanManage(quiz.OwnerId))
+            return this.ApiProblem(StatusCodes.Status403Forbidden, ErrorCodes.NotOwner, "You do not own this quiz.");
 
         var link = await _db.QuizQuestions.FirstOrDefaultAsync(qq => qq.QuizId == quizId && qq.QuestionId == questionId);
         if (link is null)
-            return Problem(detail: "This question is not part of the quiz.", statusCode: StatusCodes.Status404NotFound);
+            return this.ApiProblem(StatusCodes.Status404NotFound, ErrorCodes.QuestionNotFound, "This question is not part of the quiz.");
 
         _db.QuizQuestions.Remove(link);
         await _db.SaveChangesAsync();
