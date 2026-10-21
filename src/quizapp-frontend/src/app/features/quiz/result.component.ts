@@ -121,20 +121,23 @@ import { DialogService } from '../../core/services/dialog.service';
             <ul class="answer-list">
               <li *ngFor="let a of q.answers; let j = index"
                   class="answer"
-                  [class.is-correct]="!result.answersHidden && a.isCorrect === true"
-                  [class.is-wrong]="!result.answersHidden && a.isCorrect !== true && isSelected(q, a.answerId)"
-                  [class.is-picked]="result.answersHidden && isSelected(q, a.answerId)">
+                  [class.is-correct]="answerState(q, a) === 'correct'"
+                  [class.is-wrong]="answerState(q, a) === 'wrong'"
+                  [class.is-picked]="answerState(q, a) === 'picked'">
                 <span class="answer-letter" aria-hidden="true">{{ letter(j) }}</span>
                 <span class="answer-text">{{ a.content }}</span>
                 <span *ngIf="isSelected(q, a.answerId)" class="answer-tag">Bạn chọn</span>
                 <ng-container *ngIf="!result.answersHidden">
-                  <i *ngIf="a.isCorrect === true" class="bi bi-check-circle-fill answer-icon" role="img" aria-label="Đáp án đúng"></i>
+                  <i *ngIf="a.isCorrect === true" class="bi bi-check-circle-fill answer-icon answer-icon-correct" role="img" aria-label="Đáp án đúng"></i>
                   <i *ngIf="a.isCorrect !== true && isSelected(q, a.answerId)" class="bi bi-x-circle-fill answer-icon" role="img" aria-label="Lựa chọn sai"></i>
                 </ng-container>
               </li>
             </ul>
             <p *ngIf="q.selectedAnswerIds.length === 0" class="note">
               <i class="bi bi-dash-circle" aria-hidden="true"></i> Bạn đã bỏ trống câu này
+            </p>
+            <p *ngIf="missedCorrectAnswer(q)" class="note note-danger">
+              <i class="bi bi-exclamation-circle" aria-hidden="true"></i> Bạn chưa chọn đủ các đáp án đúng (đáp án đúng được tô xanh).
             </p>
           </ng-container>
 
@@ -250,6 +253,9 @@ import { DialogService } from '../../core/services/dialog.service';
       .answer.is-wrong { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
       .answer.is-wrong .answer-letter { background: var(--danger); color: var(--surface); }
       .answer.is-wrong .answer-icon, .answer.is-wrong .answer-tag { color: var(--danger); }
+      /* Đáp án đúng nhưng nằm trong câu bị chấm Sai (chọn thiếu): hàng đỏ, giữ dấu tích xanh để biết đáp án này đúng */
+      .answer.is-wrong .answer-icon-correct { color: var(--success); }
+      .note-danger { color: var(--danger); }
 
       .response-label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin: 0 0 0.35rem; }
       .response {
@@ -412,6 +418,32 @@ export class ResultComponent implements OnInit, OnDestroy {
 
   isSelected(q: AttemptResultQuestion, answerId: number): boolean {
     return q.selectedAnswerIds.includes(answerId);
+  }
+
+  /**
+   * Màu của 1 đáp án trong phần xem lại:
+   * - Lựa chọn của người làm bài ở câu bị chấm Sai -> đỏ (kể cả khi bản thân đáp án đó đúng, vd. câu chọn nhiều chọn thiếu);
+   * - Lựa chọn sai (đáp án không đúng) -> đỏ;
+   * - Đáp án đúng (khi được xem đáp án) / lựa chọn ở câu chấm Đúng -> xanh;
+   * - Khách làm thử (ẩn đáp án): chỉ tô lựa chọn của họ theo kết quả câu, không lộ đáp án đúng.
+   */
+  answerState(q: AttemptResultQuestion, a: { answerId: number; isCorrect: boolean | null }): 'correct' | 'wrong' | 'picked' | null {
+    const selected = this.isSelected(q, a.answerId);
+    const hidden = !!this.result?.answersHidden;
+
+    if (selected) {
+      if (q.isCorrect === false || (!hidden && a.isCorrect === false)) return 'wrong';
+      if (q.isCorrect === true) return 'correct';
+      return hidden ? 'picked' : a.isCorrect === true ? 'correct' : 'picked';
+    }
+
+    return !hidden && a.isCorrect === true ? 'correct' : null;
+  }
+
+  /** Câu trắc nghiệm bị chấm Sai mà còn đáp án đúng chưa được chọn (vd. chọn thiếu ở câu chọn nhiều). */
+  missedCorrectAnswer(q: AttemptResultQuestion): boolean {
+    if (this.result?.answersHidden || q.isCorrect !== false || q.selectedAnswerIds.length === 0) return false;
+    return q.answers.some((a) => a.isCorrect === true && !this.isSelected(q, a.answerId));
   }
 
   letter(i: number): string {
