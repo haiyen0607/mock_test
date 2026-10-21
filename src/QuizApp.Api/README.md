@@ -68,6 +68,18 @@ dotnet user-secrets set "Seed:AdminPassword" "<mật khẩu admin dev>"
 - `POST /api/auth/login`, `POST /api/auth/register`: 5 request / phút / IP.
 - `POST /api/quizzes/{id}/trial`: 10 request / giờ / IP.
 - Vượt giới hạn -> `429` + header `Retry-After` + ProblemDetails `code = RATE_LIMITED`.
+- Số lượt cho phép đổi được qua cấu hình `RateLimiting:AuthPermitLimit` / `RateLimiting:TrialPermitLimit`.
+
+### Validation, logging, health checks
+
+- **Validation:** FluentValidation (`src/QuizApp.Application/Validation/RequestValidators.cs`), chạy tự động trước
+  khi vào controller (`FluentValidationFilter`). Lỗi -> `400` ValidationProblem, `code = VALIDATION_FAILED`, `errors` theo field.
+- **Logging:** Serilog, cấu hình ở mục `Serilog` trong `appsettings*.json`. Ghi ra console và file
+  `logs/quizapp-<yyyyMMdd>.log` (giữ 14 ngày); mỗi request 1 dòng (`HTTP GET /api/quizzes responded 200 in 12 ms`).
+- **Lỗi không lường trước:** `GlobalExceptionHandler` ghi log đầy đủ và trả `500` ProblemDetails
+  `code = INTERNAL_ERROR` kèm `traceId` (trùng `RequestId` trong log) — không lộ stack trace ra client.
+- **Health checks:** `GET /health/live` (API còn chạy) và `GET /health/ready` (kết nối được database);
+  `200 Healthy` hoặc `503 Unhealthy`, kèm JSON chi tiết từng check.
 
 ## Authentication
 
@@ -254,28 +266,39 @@ src/
   QuizApp.Domain/              Tầng lõi — không phụ thuộc framework
     Entities/                  User, QuestionBank, Question, Answer, Quiz, QuizQuestion, QuizAttempt, AttemptAnswer
     Enums/                     QuestionType (+ QuestionTypeRules), UserRole, AccountStatus, ContentStatus
+    Scoring/                   Chấm điểm theo Strategy pattern: IQuestionScoringStrategy,
+                               ChoiceQuestionScoring (SingleChoice / MultipleChoice), ManualGradingScoring, AttemptScorer
 
-  QuizApp.Application/         Hợp đồng dữ liệu & quy ước dùng chung — không phụ thuộc EF Core / ASP.NET
+  QuizApp.Application/         Use case — không phụ thuộc ASP.NET / SQL Server
+    Services/                  Auth, Quizzes (Quiz + QuizQuestion), QuestionBanks, Attempts (Attempt + Grading), Admin
+                               — mỗi service = interface IXxxService + class XxxService, trả về Result<T>
+    Abstractions/              IApplicationDbContext, ICurrentUser, IPasswordHasher, IJwtTokenService
+    Common/                    Result / Error (Result pattern), ErrorCodes, PagedResult / PageQuery,
+                               PagingExtensions, SharedRules
     Dtos/                      request/response contracts + Mapper (Entity -> DTO)
-    Common/                    ErrorCodes (mã lỗi trong ProblemDetails), PagedResult / PageQuery
+    Validation/                FluentValidation validator cho request DTO
+    DependencyInjection.cs     AddApplication(): đăng ký service theo quy ước tên + strategy chấm điểm
 
-  QuizApp.Infrastructure/      Chi tiết kỹ thuật
-    Persistence/               QuizDbContext (ERD mapping), Migrations, DbSeeder,
-                               DatabaseInitializer (migrate + seed), PagingExtensions (EF Core)
+  QuizApp.Infrastructure/      Chi tiết kỹ thuật (cài đặt các Abstractions)
+    Persistence/               QuizDbContext : IApplicationDbContext, Migrations, DbSeeder,
+                               DatabaseInitializer (migrate + seed)
     Security/                  PasswordHasher (PBKDF2), JwtTokenService, JwtSigningKey
-    DependencyInjection.cs     AddInfrastructure(): đăng ký DbContext, JWT
+    DependencyInjection.cs     AddInfrastructure(): đăng ký DbContext, JWT, băm mật khẩu
 
   QuizApp.Api/                 Tầng trình bày — REST API
-    Program.cs                 startup: ProblemDetails (+code), rate limiting, JWT auth, Scalar, CORS
-    Controllers/               Auth, Quizzes, QuizQuestions, QuestionBanks, QuizAttempts, Admin,
-                               ApiProblem (helper trả lỗi có code)
-    Security/                  CurrentUserExtensions (GetUserId, CanManage)
+    Program.cs                 startup: Serilog, ProblemDetails (+code), rate limiting, JWT auth, Scalar, CORS, health
+    Filters/                   FluentValidationFilter (chạy validator trước khi vào action)
+    ErrorHandling/             GlobalExceptionHandler (log + 500 INTERNAL_ERROR)
+    HealthChecks/              /health/live, /health/ready
+    Controllers/               Controller mỏng: nhận request -> gọi service -> ResultExtensions ánh xạ
+                               Result sang HTTP (ApiProblem: lỗi có code)
+    Security/                  CurrentUser : ICurrentUser (đọc JWT claims)
     GlobalUsings.cs            namespace của các tầng dùng trong Api
     QuizApp.Api.http           ví dụ gọi API đầy đủ cho từng use case
 ```
 
-Bước tiếp theo (xem [`docs/ROADMAP.md`](../../docs/ROADMAP.md)): tách logic nghiệp vụ khỏi controller sang
-tầng Service trong `QuizApp.Application`, controller chỉ còn nhận request và gọi service.
+Luồng một request: `Controller` → `IXxxService` (Application) → `IApplicationDbContext` (Infrastructure: EF Core / SQL Server)
+→ `Result<T>` → `ResultExtensions` → HTTP 2xx hoặc ProblemDetails có `code`.
 
 ## Ghi chú
 

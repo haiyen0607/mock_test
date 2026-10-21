@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using QuizApp.Application.Abstractions;
 using QuizApp.Domain.Entities;
 
 namespace QuizApp.Infrastructure.Security;
@@ -35,7 +36,7 @@ public sealed record JwtSigningKey(SymmetricSecurityKey Key)
 }
 
 /// <summary>Sinh JWT access token dùng cho UC02 – Login.</summary>
-public class JwtTokenService
+public class JwtTokenService : IJwtTokenService
 {
     private readonly IConfiguration _config;
     private readonly JwtSigningKey _signingKey;

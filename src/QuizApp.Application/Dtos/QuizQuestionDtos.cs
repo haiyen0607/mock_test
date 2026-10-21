@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using QuizApp.Domain.Enums;
 
 namespace QuizApp.Application.Dtos;
@@ -21,14 +20,9 @@ public class AddQuizQuestionRequest
 
 public class NewQuestionPayload
 {
-    [Required(ErrorMessage = "Content is required.")]
-    [StringLength(4000)]
     public string Content { get; set; } = string.Empty;
 
-    // Nullable cố ý (xem chú thích ở QuestionRequest): enum non-nullable sẽ tự nhận
-    // giá trị mặc định MultipleChoice khi client quên gửi field, khiến [Required] vô tác dụng.
-    [Required(ErrorMessage = "QuestionType is required.")]
-    [EnumDataType(typeof(QuestionType), ErrorMessage = "QuestionType is not supported.")]
+    // Nullable cố ý: client quên gửi field -> null -> validator báo "QuestionType is required."
     public QuestionType? QuestionType { get; set; }
 
     public List<AnswerRequest> Answers { get; set; } = new();
@@ -37,8 +31,5 @@ public class NewQuestionPayload
 /// <summary>UC13 – sắp xếp lại thứ tự câu hỏi trong Quiz. Danh sách QuestionId theo đúng thứ tự mong muốn.</summary>
 public class ReorderQuizQuestionsRequest
 {
-    [Required]
-    [MinLength(1)]
-    [MaxLength(500)]
     public List<int> QuestionIds { get; set; } = new();
 }

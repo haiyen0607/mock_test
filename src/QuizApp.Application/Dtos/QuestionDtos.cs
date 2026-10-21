@@ -1,4 +1,3 @@
-using System.ComponentModel.DataAnnotations;
 using QuizApp.Domain.Enums;
 
 namespace QuizApp.Application.Dtos;
@@ -17,14 +16,10 @@ public record PublicQuestionDto(int QuestionId, int QuestionBankId, string Quest
 /// <summary>UC15 – payload tạo/sửa một Question trong Question Bank.</summary>
 public class QuestionRequest
 {
-    [Required(ErrorMessage = "Content is required.")]
-    [StringLength(4000)]
     public string Content { get; set; } = string.Empty;
 
-    // Nullable cố ý: nếu để non-nullable enum, thiếu field sẽ tự nhận giá trị mặc định
-    // (MultipleChoice) khiến [Required] không bao giờ báo lỗi.
-    [Required(ErrorMessage = "QuestionType is required.")]
-    [EnumDataType(typeof(QuestionType), ErrorMessage = "QuestionType is not supported.")]
+    // Nullable cố ý: nếu để non-nullable enum, thiếu field sẽ tự nhận giá trị mặc định (MultipleChoice)
+    // và validator không phát hiện được client quên gửi field.
     public QuestionType? QuestionType { get; set; }
 }
 
@@ -41,6 +36,5 @@ public class QuestionAndAnswersRequest : QuestionRequest
 /// </summary>
 public class ReplaceQuestionRequest : QuestionRequest
 {
-    [MaxLength(50, ErrorMessage = "A question can have at most 50 answers.")]
     public List<EditAnswerRequest> Answers { get; set; } = new();
 }

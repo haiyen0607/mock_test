@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using QuizApp.Application.Abstractions;
 using QuizApp.Infrastructure.Persistence;
 using QuizApp.Infrastructure.Security;
 
@@ -21,9 +22,15 @@ public static class DependencyInjection
         // API -> QuizDbContext -> SQL Server
         services.AddDbContext<QuizDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("QuizDb")));
+        // Tầng Application chỉ biết IApplicationDbContext; cùng instance (scoped) với QuizDbContext
+        services.AddScoped<IApplicationDbContext>(sp => sp.GetRequiredService<QuizDbContext>());
+
+        // Health check: kết nối được tới database qua DbContext (tag "ready" -> GET /health/ready)
+        services.AddHealthChecks().AddDbContextCheck<QuizDbContext>("database", tags: new[] { "ready" });
 
         services.AddSingleton(signingKey);
-        services.AddScoped<JwtTokenService>();
+        services.AddScoped<IJwtTokenService, JwtTokenService>();
+        services.AddSingleton<IPasswordHasher, PasswordHasher>();
 
         return services;
     }

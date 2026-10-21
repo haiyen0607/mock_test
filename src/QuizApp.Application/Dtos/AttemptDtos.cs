@@ -1,5 +1,3 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace QuizApp.Application.Dtos;
 
 /// <summary>UC07/UC08 – Quiz trả về cho người làm bài trước khi Submit, KHÔNG lộ đáp án đúng.</summary>
@@ -15,12 +13,10 @@ public record AttemptContentDto(int AttemptId, int QuizId, string Title, int Dur
 /// <summary>Một câu trả lời gửi lên khi Submit Quiz (UC09).</summary>
 public class AttemptAnswerRequest
 {
-    [Range(1, int.MaxValue, ErrorMessage = "QuestionId is required.")]
     public int QuestionId { get; set; }
 
     public int? AnswerId { get; set; }
 
-    [StringLength(4000)]
     public string? ResponseText { get; set; }
 }
 
@@ -29,8 +25,6 @@ public class AttemptAnswerRequest
 /// </summary>
 public class SubmitAttemptRequest
 {
-    [Required]
-    [MaxLength(200, ErrorMessage = "Too many answers in one submission.")]
     public List<AttemptAnswerRequest> Answers { get; set; } = new();
 }
 
@@ -70,7 +64,6 @@ public record GradingItemDto(int AttemptAnswerId, int AttemptId, int QuestionId,
 /// <summary>A5 – body của PUT api/attempt-answers/{id}/grade.</summary>
 public class GradeAnswerRequest
 {
-    [Required(ErrorMessage = "IsCorrect is required.")]
     public bool? IsCorrect { get; set; }
 }
 

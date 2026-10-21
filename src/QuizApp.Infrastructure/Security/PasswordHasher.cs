@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using QuizApp.Application.Abstractions;
 
 namespace QuizApp.Infrastructure.Security;
 
@@ -7,23 +8,23 @@ namespace QuizApp.Infrastructure.Security;
 /// không cần thêm package ngoài). Chuỗi lưu trong DB có dạng:
 /// "{iterations}.{saltBase64}.{hashBase64}".
 /// </summary>
-public static class PasswordHasher
+public sealed class PasswordHasher : IPasswordHasher
 {
     private const int SaltSize = 16;
     private const int HashSize = 32;
     private const int Iterations = 100_000;
 
     /// <summary>Hash giả, dùng để "verify" khi username không tồn tại (xem <see cref="VerifyDummy"/>).</summary>
-    private static readonly Lazy<string> DummyHash = new(() => Hash(Guid.NewGuid().ToString()));
+    private static readonly Lazy<string> DummyHash = new(() => new PasswordHasher().Hash(Guid.NewGuid().ToString()));
 
-    public static string Hash(string password)
+    public string Hash(string password)
     {
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, Iterations, HashAlgorithmName.SHA256, HashSize);
         return $"{Iterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
     }
 
-    public static bool Verify(string password, string stored)
+    public bool Verify(string password, string stored)
     {
         var parts = stored.Split('.', 3);
         if (parts.Length != 3) return false;
@@ -40,7 +41,7 @@ public static class PasswordHasher
     /// UC02 – chống dò tài khoản qua thời gian phản hồi (timing attack): khi không tìm thấy user vẫn chạy
     /// PBKDF2 với cùng số vòng lặp, để "sai username" và "sai mật khẩu" tốn thời gian như nhau. Luôn trả false.
     /// </summary>
-    public static bool VerifyDummy(string password)
+    public bool VerifyDummy(string password)
     {
         Verify(password, DummyHash.Value);
         return false;

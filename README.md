@@ -9,8 +9,8 @@ Full-stack quiz and assessment platform built with **ASP.NET Core 8** (Clean Arc
 ```
 QuizApp.sln
 src/
-  QuizApp.Domain/           Entities, enums, domain rules (no framework dependencies)
-  QuizApp.Application/      DTOs, mapping, error codes, paging contracts
+  QuizApp.Domain/           Entities, enums, domain rules, scoring strategies (no framework dependencies)
+  QuizApp.Application/      Use-case services (Result pattern), DTOs, mapping, error codes, abstractions
   QuizApp.Infrastructure/   EF Core DbContext + migrations, seeding, password hashing, JWT
   QuizApp.Api/              ASP.NET Core REST API (controllers, startup)
   quizapp-frontend/         Angular 21 SPA

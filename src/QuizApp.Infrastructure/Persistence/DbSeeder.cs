@@ -17,11 +17,13 @@ public static class DbSeeder
     {
         if (db.Users.Any()) return;
 
+        var hasher = new PasswordHasher();
+
         var admin = new User
         {
             Username = "admin",
             Email = "admin@quizapp.local",
-            PasswordHash = PasswordHasher.Hash(adminPassword),
+            PasswordHash = hasher.Hash(adminPassword),
             Role = UserRole.Administrator,
             Status = AccountStatus.Active,
             CreatedAt = DateTime.UtcNow
@@ -31,7 +33,7 @@ public static class DbSeeder
         {
             Username = "hoanganh",
             Email = "hoanganh@quizapp.local",
-            PasswordHash = PasswordHasher.Hash(userPassword),
+            PasswordHash = hasher.Hash(userPassword),
             Role = UserRole.User,
             Status = AccountStatus.Active,
             CreatedAt = DateTime.UtcNow

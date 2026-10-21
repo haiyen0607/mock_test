@@ -22,13 +22,15 @@ Mục tiêu: biến QuizApp thành dự án thể hiện đủ các yêu cầu t
 
 ## Các giai đoạn
 
-### Giai đoạn 1 — Tái cấu trúc backend theo Clean Architecture (1,5–2 tuần) · quan trọng nhất
+### Giai đoạn 1 — Tái cấu trúc backend theo Clean Architecture (1,5–2 tuần) · quan trọng nhất · ✅ hoàn thành
 - [x] Sắp xếp repo: `QuizApp.sln`, `src/`, `docs/`
 - [x] Tách solution thành `QuizApp.Domain` / `QuizApp.Application` / `QuizApp.Infrastructure` / `QuizApp.Api`
-- [ ] Tầng Service (`IQuizService`, `IAttemptService`, …) + Repository / Unit of Work; controller chỉ nhận request và gọi service
-- [ ] OOP: chấm điểm theo loại câu hỏi bằng **Strategy pattern** (`IScoringStrategy`: `SingleChoiceScoring`, `MultipleChoiceScoring`, `ManualScoring`)
-- [ ] FluentValidation thay DataAnnotations; Result pattern cho lỗi nghiệp vụ
-- [ ] Serilog (structured logging), middleware xử lý exception toàn cục, health checks
+- [x] Tầng Service (`IAuthService`, `IQuizService`, `IQuizQuestionService`, `IQuestionBankService`, `IAttemptService`, `IGradingService`, `IAdminService`) dùng `IApplicationDbContext`; controller chỉ nhận request và gọi service (~2.000 → ~650 dòng)
+- [x] OOP: chấm điểm theo loại câu hỏi bằng **Strategy pattern** (`IQuestionScoringStrategy`: `SingleChoiceScoring`, `MultipleChoiceScoring` kế thừa `ChoiceQuestionScoring`; `ManualGradingScoring`; điều phối bởi `AttemptScorer`)
+- [x] Result pattern cho lỗi nghiệp vụ (`Result<T>`, `Error`), ánh xạ sang ProblemDetails ở tầng Api
+- [x] `ICurrentUser`, `IPasswordHasher`, `IJwtTokenService`: tầng Application không phụ thuộc ASP.NET
+- [x] FluentValidation thay DataAnnotations (`Application/Validation`, chạy qua `FluentValidationFilter`; giữ nguyên câu chữ thông báo lỗi)
+- [x] Serilog (console + file `logs/quizapp-<ngày>.log`, 1 dòng log mỗi request), `GlobalExceptionHandler` (500 `INTERNAL_ERROR` + traceId), health checks `/health/live` và `/health/ready` (kiểm tra database)
 
 ### Giai đoạn 2 — Kiểm thử & CI (1 tuần)
 - [ ] Unit test: xUnit + Moq + FluentAssertions cho chấm điểm và quy tắc nghiệp vụ

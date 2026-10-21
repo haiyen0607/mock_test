@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Tầng Application: DTO, mapping, mã lỗi, kiểu dùng chung (phân trang). Chỉ phụ thuộc Domain, không phụ thuộc EF Core / ASP.NET. -->
+  <!-- Tầng Application: use case (Services), DTO, mapping, mã lỗi, Result. Phụ thuộc Domain + EF Core (qua IApplicationDbContext); không phụ thuộc ASP.NET hay SQL Server. -->
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -8,6 +8,15 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- DbSet, LINQ async, ExecuteUpdate/ExecuteDelete. Provider (SqlServer) chỉ có ở Infrastructure. -->
+    <PackageReference Include="FluentValidation" Version="11.11.0" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" Version="11.11.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="8.0.8" />
+    <!-- IServiceCollection cho AddApplication() -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.1" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\QuizApp.Domain\QuizApp.Domain.csproj" />

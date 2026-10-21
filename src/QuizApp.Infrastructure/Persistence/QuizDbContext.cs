@@ -1,10 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
+using QuizApp.Application.Abstractions;
 using QuizApp.Domain.Entities;
 
 namespace QuizApp.Infrastructure.Persistence;
 
-public class QuizDbContext : DbContext
+public class QuizDbContext : DbContext, IApplicationDbContext
 {
     public QuizDbContext(DbContextOptions<QuizDbContext> options) : base(options) { }
 
