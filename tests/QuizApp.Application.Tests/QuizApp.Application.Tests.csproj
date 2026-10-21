@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Unit test tầng Application: validator (FluentValidation) và service (Moq cho các dependency, EF Core InMemory cho dữ liệu). -->
+
+  <ItemGroup>
+    <PackageReference Include="Moq" Version="4.20.72" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="8.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QuizApp.Application\QuizApp.Application.csproj" />
+    <ProjectReference Include="..\..\src\QuizApp.Infrastructure\QuizApp.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -32,11 +32,12 @@ Mục tiêu: biến QuizApp thành dự án thể hiện đủ các yêu cầu t
 - [x] FluentValidation thay DataAnnotations (`Application/Validation`, chạy qua `FluentValidationFilter`; giữ nguyên câu chữ thông báo lỗi)
 - [x] Serilog (console + file `logs/quizapp-<ngày>.log`, 1 dòng log mỗi request), `GlobalExceptionHandler` (500 `INTERNAL_ERROR` + traceId), health checks `/health/live` và `/health/ready` (kiểm tra database)
 
-### Giai đoạn 2 — Kiểm thử & CI (1 tuần)
-- [ ] Unit test: xUnit + Moq + FluentAssertions cho chấm điểm và quy tắc nghiệp vụ
-- [ ] Integration test: `WebApplicationFactory` + Testcontainers (SQL Server trong Docker)
-- [ ] GitHub Actions: build + test mỗi PR, badge trong README
-- [ ] Làm việc theo branch + Pull Request, Conventional Commits, GitHub Issues / Projects
+### Giai đoạn 2 — Kiểm thử & CI (1 tuần) · ✅ hoàn thành
+- [x] Unit test: xUnit + Moq + FluentAssertions — `QuizApp.Domain.Tests` (110: chấm điểm, quy tắc loại câu hỏi), `QuizApp.Application.Tests` (156: validator, Result, AuthService/QuizService với Moq)
+- [x] Integration test: `WebApplicationFactory` + **SQL Server LocalDB** (107 test, mỗi lần chạy 1 database riêng). *Thay Testcontainers vì máy không có Docker; LocalDB có sẵn trên GitHub Actions windows-latest.*
+- [x] GitHub Actions (`.github/workflows/ci.yml`): backend build + toàn bộ test (kèm coverage, kết quả .trx) trên Windows, frontend `ng build` trên Ubuntu; badge trong README
+- [x] Làm việc theo branch (`feature/phase-N-...`) + mẫu Pull Request (`.github/pull_request_template.md`), Conventional Commits
+- [ ] GitHub Issues / Projects — tạo trên giao diện GitHub (cần tài khoản của bạn)
 
 ### Giai đoạn 3 — Nghiệp vụ ERP (1,5–2 tuần)
 - [ ] Thực thể **Phòng ban**, **Nhân viên**; vai trò **HR Manager** (bên cạnh Admin / Nhân viên)

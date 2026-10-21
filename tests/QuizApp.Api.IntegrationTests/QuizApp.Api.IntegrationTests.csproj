@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Integration test: chạy toàn bộ API trong bộ nhớ (WebApplicationFactory) với database SQL Server LocalDB thật,
+    mỗi lần chạy 1 database riêng (tạo bằng migrations, xoá khi xong). Kiểm tra end-to-end: HTTP -> controller ->
+    service -> EF Core -> SQL Server.
+  -->
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" Version="8.0.8" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QuizApp.Api\QuizApp.Api.csproj" />
+  </ItemGroup>
+
+</Project>

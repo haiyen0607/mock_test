@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Unit test tầng Domain: chấm điểm (Strategy pattern), quy tắc loại câu hỏi. Không cần database. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QuizApp.Domain\QuizApp.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

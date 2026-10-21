@@ -261,3 +261,6 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+/// <summary>Cho phép integration test (WebApplicationFactory&lt;Program&gt;) khởi động API trong bộ nhớ.</summary>
+public partial class Program { }
